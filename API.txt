@@ -1,0 +1,23 @@
+1. signup - https://my-app-cf80.onrender.com/api/signup
+
+2. login - https://my-app-cf80.onrender.com/api/login
+
+3. get profile - https://my-app-cf80.onrender.com/api/Profile
+
+4. Update User Profile API -  https://my-app-cf80.onrender.com/api/Profile
+
+
+ 5. Change Password API -  https://my-app-cf80.onrender.com/api/password
+
+ 6. create order - https://my-app-cf80.onrender.com/api/orders
+
+
+ 7. Get User Orders API - https://my-app-cf80.onrender.com/api/orders
+
+ 8. Edit an order - https://my-app-cf80.onrender.com/api/orders/:id
+
+  9. Cancel an order - https://my-app-cf80.onrender.com/api/orders/:id/cancel
+
+  10. get user order number cancel,edit,total,pending - https://my-app-cf80.onrender.com/api/user-stats
+
+
