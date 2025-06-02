@@ -710,6 +710,82 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
 
 // Fetch orders for the authenticated user
 
+// app.get("/api/orders", authenticateToken, async (req, res) => {
+//   try {
+//     const userId = req.user.id;
+
+//     const [orders] = await pool.query(
+//       `SELECT
+//           o.order_id AS id,
+//           o.created_at AS created_at,
+//           o.door_style,
+//           o.finish_type,
+//           o.stain_option,
+//           o.paint_option,
+//           o.account,
+//           o.bill_to,
+//           o.subtotal,
+//           o.tax,
+//           o.shipping,
+//           o.total,
+//           o.discount,
+//           o.status,
+
+//           GROUP_CONCAT(
+//             JSON_OBJECT(
+//               'sku', oi.sku,
+//               'name', oi.name,
+//               'quantity', oi.quantity,
+//               'price', oi.price,
+//               'totalAmount', oi.total_amount
+//             )
+//           ) AS items
+//           FROM orders o
+//           LEFT JOIN order_items oi ON o.id = oi.order_id
+//           WHERE o.user_id = ?
+//           GROUP BY o.id
+//           ORDER BY o.created_at DESC`,
+//       [userId]
+//     );
+
+//     const formattedOrders = orders.map((order) => {
+//       console.log(`Order ${order.id}: created_at = ${order.created_at}`); // Debug log
+//       return {
+//         id: order.id,
+//         created_at: order.created_at
+//           ? new Date(order.created_at).toISOString()
+//           : null, // Ensure ISO format
+//         date: order.created_at
+//           ? new Date(order.created_at).toISOString().split("T")[0]
+//           : null, // For display
+//         productLine: order.door_style.includes("Shaker")
+//           ? "Kitchen Shaker"
+//           : "Bath Shaker",
+//         status: order.status,
+//         total: `$${parseFloat(order.total || 0).toFixed(2)}`,
+//         subtotal: parseFloat(order.subtotal || 0).toFixed(2),
+//         discount: parseFloat(order.discount || 0).toFixed(2),
+//         tax: parseFloat(order.tax || 0).toFixed(2),
+//         shipping:
+//           order.shipping !== null
+//             ? parseFloat(order.shipping).toFixed(2)
+//             : null,
+//         account: order.account,
+//         bill_to: order.bill_to,
+//         items: order.items ? JSON.parse(`[${order.items}]`) : [],
+//         door_style: order.door_style,
+//         finish_type: order.finish_type,
+//         stain_option: order.stain_option,
+//         paint_option: order.paint_option,
+//       };
+//     });
+
+//     res.json(formattedOrders);
+//   } catch (err) {
+//     console.error("Server error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
 
 app.get("/api/orders", authenticateToken, async (req, res) => {
   try {
@@ -1900,8 +1976,236 @@ app.put(
   }
 );
 
+// Fetch All Orders
+// app.get('/api/admin/orders', adminauthenticateToken, async (req, res) => {
+//   try {
+//     const [orders] = await pool.query(`
+//       SELECT
+//         o.id,
+//         o.order_id,
+//         o.user_id,
+//         u.full_name AS user_name,
+//         u.email AS user_email,
+//         o.door_style,
+//         o.finish_type,
+//         o.stain_option,
+//         o.paint_option,
+//         o.account,
+//         o.bill_to,
+//         o.subtotal,
+//         o.tax,
+//         o.shipping,
+//         o.total,
+//         o.status,
+//         o.created_at
+//       FROM orders o
+//       LEFT JOIN users u ON o.user_id = u.id
+//       ORDER BY o.created_at DESC
+//     `);
 
+//     res.json({
+//       orders: orders.map(order => ({
+//         id: order.id,
+//         orderId: order.order_id,
+//         userId: order.user_id,
+//         userName: order.user_name || 'Unknown User',
+//         userEmail: order.user_email || 'N/A',
+//         doorStyle: order.door_style,
+//         finishType: order.finish_type,
+//         stainOption: order.stain_option || 'None',
+//         paintOption: order.paint_option || 'None',
+//         account: order.account,
+//         billTo: order.bill_to,
+//         subtotal: parseFloat(order.subtotal).toFixed(2),
+//         tax: parseFloat(order.tax).toFixed(2),
+//         shipping: order.shipping ? parseFloat(order.shipping).toFixed(2) : '0.00',
+//         total: parseFloat(order.total).toFixed(2),
+//         status: order.status,
+//         createdAt: order.created_at,
+//       })),
+//     });
+//   } catch (err) {
+//     console.error('Server error:', err);
+//     res.status(500).json({ error: 'Server error' });
+//   }
+// });
 
+// // GET /api/admin/orders
+// app.get("/api/admin/orders", adminauthenticateToken, async (req, res) => {
+//   try {
+//     const [orders] = await pool.query(`
+//       SELECT
+//         o.id AS id,
+//         o.order_id AS orderId,
+//         o.user_id,
+//         u.full_name AS userName,
+//         u.email AS userEmail,
+//         o.created_at AS created_at,
+//         o.door_style AS door_style,
+//         o.finish_type AS finish_type,
+//         o.stain_option AS stain_option,
+//         o.paint_option AS paint_option,
+//         o.account,
+//         o.bill_to,
+//         o.subtotal,
+//         o.tax,
+//         o.shipping,
+//         o.total,
+//         o.discount,
+//         o.additional_discount AS additional_discount,
+//         o.status,
+//         GROUP_CONCAT(
+//           JSON_OBJECT(
+//             'sku', oi.sku,
+//             'name', oi.name,
+//             'quantity', oi.quantity,
+//             'price', oi.price,
+//             'totalAmount', oi.total_amount
+//           )
+//         ) AS items
+//       FROM orders o
+//       LEFT JOIN users u ON o.user_id = u.id
+//       LEFT JOIN order_items oi ON o.id = oi.order_id
+//       GROUP BY o.id
+//       ORDER BY o.created_at DESC
+//     `);
+
+//     const formattedOrders = orders.map((order) => {
+//       console.log(`Order ${order.orderId}: created_at = ${order.created_at}`); // Debug log
+//       return {
+//         id: order.id,
+//         orderId: order.orderId,
+//         userId: order.user_id,
+//         userName: order.userName || "Unknown User",
+//         userEmail: order.userEmail || "N/A",
+//         created_at: order.created_at
+//           ? new Date(order.created_at).toISOString()
+//           : null,
+//         date: order.created_at
+//           ? new Date(order.created_at).toISOString().split("T")[0]
+//           : null,
+//         productLine: order.door_style.includes("Shaker")
+//           ? "Kitchen Shaker"
+//           : "Bath Shaker",
+//         status: order.status,
+//         total: `$${parseFloat(order.total || 0).toFixed(2)}`,
+//         subtotal: parseFloat(order.subtotal || 0).toFixed(2),
+//         discount: parseFloat(order.discount || 0).toFixed(2),
+//         additional_discount: parseFloat(order.additional_discount || 0).toFixed(
+//           2
+//         ),
+//         tax: parseFloat(order.tax || 0).toFixed(2),
+//         shipping:
+//           order.shipping !== null
+//             ? parseFloat(order.shipping).toFixed(2)
+//             : null,
+//         account: order.account,
+//         bill_to: order.bill_to,
+//         items: order.items ? JSON.parse(`[${order.items}]`) : [],
+//         door_style: order.door_style,
+//         finish_type: order.finish_type,
+//         stain_option: order.stain_option,
+//         paint_option: order.paint_option,
+//       };
+//     });
+
+//     res.json(formattedOrders);
+//   } catch (err) {
+//     console.error("Server error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+// // GET /api/admin/orders/:id (unchanged)
+// app.get("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
+//   const orderId = req.params.id;
+//   try {
+//     const [orders] = await pool.query(
+//       `
+//       SELECT
+//         o.id,
+//         o.order_id AS orderId,
+//         o.user_id,
+//         u.full_name AS userName,
+//         u.email AS userEmail,
+//         o.door_style AS doorStyle,
+//         o.finish_type AS finishType,
+//         o.stain_option AS stainOption,
+//         o.paint_option AS paintOption,
+//         o.account,
+//         o.bill_to AS billTo,
+//         o.subtotal,
+//         o.tax,
+//         o.shipping,
+//         o.total,
+//         o.discount,
+//         o.additional_discount AS additionalDiscount,
+//         o.status,
+//         o.created_at AS createdAt,
+//         GROUP_CONCAT(
+//           JSON_OBJECT(
+//             'sku', oi.sku,
+//             'name', oi.name,
+//             'quantity', oi.quantity,
+//             'price', oi.price,
+//             'totalAmount', oi.total_amount
+//           )
+//         ) AS items
+//       FROM orders o
+//       LEFT JOIN users u ON o.user_id = u.id
+//       LEFT JOIN order_items oi ON o.id = oi.order_id
+//       WHERE o.id = ?
+//       GROUP BY o.id
+//     `,
+//       [orderId]
+//     );
+
+//     if (orders.length === 0) {
+//       return res.status(404).json({ error: "Order not found" });
+//     }
+
+//     const order = orders[0];
+//     res.json({
+//       order: {
+//         id: order.id,
+//         orderId: order.orderId,
+//         userId: order.user_id,
+//         userName: order.userName || "Unknown User",
+//         userEmail: order.userEmail || "N/A",
+//         door_style: order.doorStyle,
+//         finish_type: order.finishType,
+//         stain_option: order.stainOption || "None",
+//         paint_option: order.paintOption || "None",
+//         account: order.account,
+//         bill_to: order.billTo,
+//         subtotal: parseFloat(order.subtotal || 0).toFixed(2),
+//         tax: parseFloat(order.tax || 0).toFixed(2),
+//         shipping: order.shipping ? parseFloat(order.shipping).toFixed(2) : null,
+//         discount: parseFloat(order.discount || 0).toFixed(2),
+//         additional_discount: parseFloat(order.additional_discount || 0).toFixed(
+//           2
+//         ),
+//         total: parseFloat(order.total || 0).toFixed(2),
+//         status: order.status,
+//         created_at: order.createdAt
+//           ? new Date(order.createdAt).toISOString()
+//           : null,
+//         date: order.createdAt
+//           ? new Date(order.createdAt).toISOString().split("T")[0]
+//           : null,
+//         productLine: order.doorStyle.includes("Shaker")
+//           ? "Kitchen Shaker"
+//           : "Bath Shaker",
+//         items: order.items ? JSON.parse(`[${order.items}]`) : [],
+//       },
+//     });
+//   } catch (err) {
+//     console.error("Server error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+// GET /api/admin/orders
 app.get("/api/admin/orders", adminauthenticateToken, async (req, res) => {
   try {
     const [orders] = await pool.query(`
@@ -1982,6 +2286,88 @@ app.get("/api/admin/orders", adminauthenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/admin/orders/:id
+// app.get("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
+//   const orderId = req.params.id;
+//   try {
+//     const [orders] = await pool.query(
+//       `
+//       SELECT
+//         o.id,
+//         o.order_id AS orderId,
+//         o.user_id,
+//         u.full_name AS userName,
+//         u.email AS userEmail,
+//         o.door_style AS doorStyle,
+//         o.finish_type AS finishType,
+//         o.stain_option AS stainOption,
+//         o.paint_option AS paintOption,
+//         o.account,
+//         o.bill_to AS billTo,
+//         o.subtotal,
+//         o.tax,
+//         o.shipping,
+//         o.discount,
+//         o.additional_discount,
+//         o.total,
+//         o.status,
+//         o.created_at AS createdAt,
+//         GROUP_CONCAT(
+//           JSON_OBJECT(
+//             'sku', oi.sku,
+//             'name', oi.name,
+//             'quantity', oi.quantity,
+//             'price', oi.price,
+//             'totalAmount', oi.total_amount
+//           )
+//         ) AS items
+//       FROM orders o
+//       LEFT JOIN users u ON o.user_id = u.id
+//       LEFT JOIN order_items oi ON o.id = oi.order_id
+//       WHERE o.id = ?
+//       GROUP BY o.id
+//     `,
+//       [orderId]
+//     );
+
+//     if (orders.length === 0) {
+//       return res.status(404).json({ error: "Order not found" });
+//     }
+
+//     const order = orders[0];
+//     res.json({
+//       order: {
+//         id: order.id,
+//         orderId: order.orderId,
+//         userId: order.user_id,
+//         userName: order.userName || "Unknown User",
+//         userEmail: order.userEmail || "N/A",
+//         door_style: order.doorStyle,
+//         finish_type: order.finishType,
+//         stain_option: order.stainOption || "None",
+//         paint_option: order.paintOption || "None",
+//         account: order.account,
+//         bill_to: order.billTo,
+//         subtotal: parseFloat(order.subtotal || 0).toFixed(2),
+//         tax: parseFloat(order.tax || 0).toFixed(2),
+//         shipping: order.shipping ? parseFloat(order.shipping).toFixed(2) : null,
+//         discount: parseFloat(order.discount || 0).toFixed(2),
+//         additional_discount: parseFloat(order.additional_discount || 0).toFixed(2),
+//         total: parseFloat(order.total || 0).toFixed(2),
+//         status: order.status,
+//         created_at: order.createdAt
+//           ? new Date(order.createdAt).toISOString()
+//           : null,
+//         date: order.createdAt
+//           ? new Date(order.createdAt).toISOString().split("T")[0]
+//           : null,
+//       },
+//     });
+//   } catch (err) {
+//     console.error("Server error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
 
 app.get("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
   const orderId = req.params.id;
@@ -2077,6 +2463,206 @@ app.get("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
   }
 });
 
+// // UPDATED: POST /api/admin/orders/:id to update shipping and total
+// app.post("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
+//   const { id } = req.params;
+//   const { shipping } = req.body;
+
+//   console.log(`POST /api/admin/orders/${id} called with shipping: ${shipping}`);
+
+//   // Validate shipping
+//   if (typeof shipping !== "number" || shipping < 0) {
+//     console.log(`Invalid shipping charge: ${shipping}`);
+//     return res.status(400).json({ error: "Invalid shipping charge" });
+//   }
+
+//   try {
+//     // Fetch order details
+//     const [orders] = await pool.query(
+//       `SELECT o.id, o.order_id, o.total, o.user_id, u.full_name, u.email
+//          FROM orders o
+//          LEFT JOIN users u ON o.user_id = u.id
+//          WHERE o.id = ?`,
+//       [id]
+//     );
+//     if (orders.length === 0) {
+//       console.log(`Order ${id} not found`);
+//       return res.status(404).json({ error: "Order not found" });
+//     }
+
+//     const order = orders[0];
+//     const user = {
+//       full_name: order.full_name || "Customer",
+//       email: order.email || "N/A",
+//     };
+
+//     // Calculate new total
+//     const currentTotal = parseFloat(order.total) || 0;
+//     const newShipping = parseFloat(shipping);
+//     const newTotal = currentTotal + newShipping;
+
+//     // Update shipping and total
+//     await pool.query("UPDATE orders SET shipping = ?, total = ? WHERE id = ?", [
+//       newShipping,
+//       newTotal,
+//       id,
+//     ]);
+
+//     // Send email to user
+//     const mailOptions = {
+//       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//       to: user.email,
+//       subject: `Updated Order #${order.order_id}: Final Amount with Shipping`,
+//       html: `
+//           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//             <h2>Hello, ${user.full_name}!</h2>
+//             <p>We’ve updated the shipping charges for your order <strong>#${
+//               order.order_id
+//             }</strong>. Below is the final amount including the new shipping charges.</p>
+//             <h3>Order Summary:</h3>
+//             <ul style="list-style: none; padding: 0;">
+//               <li><strong>Order ID:</strong> ${order.order_id}</li>
+//               <li><strong>Shipping Charges:</strong> $${newShipping.toFixed(
+//                 2
+//               )}</li>
+//               <li><strong>Final Total:</strong> $${newTotal.toFixed(2)}</li>
+//             </ul>
+//             <p><strong>Next Steps:</strong></p>
+//             <ul>
+//               <li>You can view your updated order details in your account at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
+//               <li>If you have any questions, please contact our support team at <a href="mailto:support@studiosignaturecabinets.com">support@studiosignaturecabinets.com</a>.</li>
+//             </ul>
+//             <p>Thank you for choosing Studio Signature Cabinets!</p>
+//             <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//           </div>
+//         `,
+//     };
+
+//     try {
+//       await transporter.sendMail(mailOptions);
+//       console.log(`Shipping update email sent to ${user.email}`);
+//     } catch (emailErr) {
+//       console.error("Failed to send shipping update email:", emailErr);
+//       // Log error but don't fail the update
+//     }
+
+//     console.log(
+//       `Shipping and total updated for order ${id}: shipping=${newShipping}, total=${newTotal}`
+//     );
+//     res.json({
+//       message: "Shipping charges and total updated successfully",
+//       shipping: newShipping,
+//       total: newTotal,
+//     });
+//   } catch (err) {
+//     console.error("Server error updating shipping:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+// // Fallback: PUT /api/admin/orders/:id/shipping
+// app.put(
+//   "/api/admin/orders/:id/shipping",
+//   adminauthenticateToken,
+//   async (req, res) => {
+//     const { id } = req.params;
+//     const { shipping } = req.body;
+
+//     console.log(
+//       `PUT /api/admin/orders/${id}/shipping called with shipping: ${shipping}`
+//     );
+
+//     // Validate shipping
+//     if (typeof shipping !== "number" || shipping < 0) {
+//       console.log(`Invalid shipping charge: ${shipping}`);
+//       return res.status(400).json({ error: "Invalid shipping charge" });
+//     }
+
+//     try {
+//       // Fetch order details
+//       const [orders] = await pool.query(
+//         `SELECT o.id, o.order_id, o.total, o.user_id, u.full_name, u.email
+//          FROM orders o
+//          LEFT JOIN users u ON o.user_id = u.id
+//          WHERE o.id = ?`,
+//         [id]
+//       );
+//       if (orders.length === 0) {
+//         console.log(`Order ${id} not found`);
+//         return res.status(404).json({ error: "Order not found" });
+//       }
+
+//       const order = orders[0];
+//       const user = {
+//         full_name: order.full_name || "Customer",
+//         email: order.email || "N/A",
+//       };
+
+//       // Calculate new total
+//       const currentTotal = parseFloat(order.total) || 0;
+//       const newShipping = parseFloat(shipping);
+//       const newTotal = currentTotal + newShipping;
+
+//       // Update shipping and total
+//       await pool.query(
+//         "UPDATE orders SET shipping = ?, total = ? WHERE id = ?",
+//         [newShipping, newTotal, id]
+//       );
+
+//       // Send email to user
+//       const mailOptions = {
+//         from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//         to: user.email,
+//         subject: `Updated Order #${order.order_id}: Final Amount with Shipping`,
+//         html: `
+//           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//             <h2>Hello, ${user.full_name}!</h2>
+//             <p>We’ve updated the shipping charges for your order <strong>#${
+//               order.order_id
+//             }</strong>. Below is the final amount including the new shipping charges.</p>
+//             <h3>Order Summary:</h3>
+//             <ul style="list-style: none; padding: 0;">
+//               <li><strong>Order ID:</strong> ${order.order_id}</li>
+//               <li><strong>Shipping Charges:</strong> $${newShipping.toFixed(
+//                 2
+//               )}</li>
+//               <li><strong>Final Total:</strong> $${newTotal.toFixed(2)}</li>
+//             </ul>
+//             <p><strong>Next Steps:</strong></p>
+//             <ul>
+//               <li>You can view your updated order details in your account at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
+//               <li>If you have any questions, please contact our support team at <a href="mailto:support@studiosignaturecabinets.com">support@studiosignaturecabinets.com</a>.</li>
+//             </ul>
+//             <p>Thank you for choosing Studio Signature Cabinets!</p>
+//             <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//           </div>
+//         `,
+//       };
+
+//       try {
+//         await transporter.sendMail(mailOptions);
+//         console.log(`Shipping update email sent to ${user.email}`);
+//       } catch (emailErr) {
+//         console.error("Failed to send shipping update email:", emailErr);
+//         // Log error but don't fail the update
+//       }
+
+//       console.log(
+//         `Shipping and total updated for order ${id}: shipping=${newShipping}, total=${newTotal}`
+//       );
+//       res.json({
+//         message: "Shipping charges and total updated successfully",
+//         shipping: newShipping,
+//         total: newTotal,
+//       });
+//     } catch (err) {
+//       console.error("Server error updating shipping:", err);
+//       res.status(500).json({ error: "Server error" });
+//     }
+//   }
+// );
+
+// POST /api/admin/orders/:id
 
 app.post("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
   const { id } = req.params;
@@ -2387,6 +2973,295 @@ app.put(
   }
 );
 
+// PUT /api/admin/orders/:id/shipping (fallback)
+// app.put(
+//   "/api/admin/orders/:id/shipping",
+//   adminauthenticateToken,
+//   async (req, res) => {
+//     const { id } = req.params;
+//     const { shipping, additional_discount } = req.body;
+
+//     console.log(`PUT /api/admin/orders/${id}/shipping called with shipping: ${shipping}, additional_discount: ${additional_discount}`);
+
+//     // Validate inputs if provided
+//     if (
+//       (shipping !== undefined && (typeof shipping !== "number" || shipping < 0)) ||
+//       (additional_discount !== undefined && (typeof additional_discount !== "number" || additional_discount < 0))
+//     ) {
+//       console.log(`Invalid input: shipping=${shipping}, additional_discount=${additional_discount}`);
+//       return res.status(400).json({ error: "Invalid shipping or additional discount" });
+//     }
+
+//     try {
+//       // Fetch order details
+//       const [orders] = await pool.query(
+//         `SELECT o.id, o.order_id, o.subtotal, o.tax, o.discount, o.additional_discount AS current_additional_discount,
+//                 o.shipping AS current_shipping, o.total, o.user_id, u.full_nameacidade, u.id AS userId, u.full_name, u.email
+//          FROM orders o
+//          LEFT JOIN users u ON o.user_id = u.id
+//          WHERE o.id = ?`,
+//         [id]
+//       );
+//       if (orders.length === 0) {
+//         console.log(`Order ${id} not found`);
+//         return res.status(404).json({ error: "Order not found" });
+//       }
+
+//       const order = orders[0];
+//       const user = {
+//         full_name: order.full_name || "Customer order",
+//         email: order.email || 'N/A'
+//       };
+
+//       // Use provided values or keep current
+//       const newShippingAmount = shipping !== undefined ? parseFloat(shipping) : parseFloat(order.current_shipping || 0);
+//       const newDiscountAmount = additional_discount !== undefined ? parseFloat(additional_discount) : parseFloat(order.current_additional_discount || 0);
+//       // Calculate new shipping
+//       const subtotalAmount = parseFloat(order.subtotal) || 0;
+//       const taxAmount = parseFloat(order.tax) || 0;
+//       const discountAmount = parseFloat(order.discount) || 0;
+//       let newTotalAmount;
+//       if (discountAmount > 0) {
+//         newTotalAmount = subtotalAmount - newAdditionalDiscountAmount - discountAmount + taxAmount + newShippingAmount;
+//       } else {
+//         newTotalAmount = subtotalAmount - newAdditionalDiscountAmount + taxAmount + newShippingAmount;
+//       }
+
+//       // Use provided values or keep current
+//       const newShipping = shipping !== undefined ? parseFloat(shipping) : parseFloat(order.current_shipping || 0);
+//       const newAdditionalDiscount = additional_discount !== undefined ? parseFloat(additional_discount) : parseFloat(order.current_additional_discount || 0);
+
+//       // Calculate new total
+//       const subtotal = parseFloat(order.subtotal) || 0;
+//       const tax = parseFloat(order.tax) || 0;
+//       const discount = parseFloat(order.discount) || 0;
+//       let newTotal;
+//       if (discount > 0) {
+//         newTotal = subtotal - newAdditionalDiscount - discount + tax + newShipping;
+//       } else {
+//         newTotal = subtotal - newAdditionalDiscount + tax + newShipping;
+
+//       }
+
+//       // Ensure total is non-negative
+//       if (newTotalAmount < 0) {
+//         console.log('Invalid total calculated: ${newTotalAmount}');
+//         return res.status(400).json({ error: 'Total cannot be negative' });
+//         return res.status(400).json({ error: "Total cannot be negative" });
+//       }
+
+//       // Update database
+//       await pool.query(
+//         'UPDATE orders SET shipping = ?, additionalDiscountAmount = ?, totalAmount = ? WHERE id = ?', [newShippingAmount, newDiscountAmount, newTotalAmount, id]
+//         "UPDATE orders SET shipping = ?, additional_discount = ?, total = ? WHERE id = ?",
+//         [newShipping, newAdditionalDiscount, newTotalAmount, id]
+//       );
+
+//       // Send email if changes were made
+//       if (shipping !== undefined || additionalDiscount !== undefined) {
+//       {
+//         const emailOptions = {
+//           from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//           to: user.email,
+//           subject: `Updated Order #${orderDetails.order_id}: Final Amount`,
+//           html: `
+//             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; items: padding: 20px;">
+//               <p>Hello, ${userDetails.fullName}!</p>,
+//               <p>We’ve updated your order <strong>#${order.order_id}</strong>. Below is the final amount including any shipping charges and additional discounts.</p>
+//               <h3>Order Details:</h3>
+//               <ul style="list-style: none; padding: 0;">
+//                 <li><strong>Order ID:</strong> ${order.order_id}</li>
+//                 <li>Subtotal:</li> $${subtotalAmount.toFixed(2)}</li>
+//                 <li>Tax:</li> $${taxAmount.toFixed(2)}</li>
+//                 <li>Discount:</li> $${discountAmount.toFixed(2)}</li>
+//                 <li>Additional Discount:</li> $${newDiscountAmount.toFixed(2)}</li>
+//                 <li>Shipping Charges:</li> $${newShippingAmount.toFixed(2)}</li>
+//                 <li>Final Total:</li> $${newTotalAmount.toFixed(2)}</li>
+//               </ul>
+//               <p><strong>Next Steps:</strong> </p>
+//               <ul>
+//                 <li>You can view your updated order details at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
+//                 <li>Contact us at <a href="mailto:support@studiosignaturecabinets.com">support@studiosignaturecabinets.com</a> for questions.</li>
+//               </ul>
+//               <p>Thank you for choosing Studio Signature Cabinets!</p>
+//               <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//             </div>
+//           `
+//         };
+//       if (shipping !== undefined || additional_discount !== undefined) {
+//         const mailOptions = {
+//           from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//           to: order.email,
+//           subject: `Updated Order #${order.order_id}: Final Amount`,
+//           html: `
+//             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//               <h2>Hello, ${user.full_name}!</h2>
+//               <p>We’ve updated your order <strong>#${order.order_id}</strong>. Below is the final amount including any shipping charges and additional discounts.</p>
+//               <h3>Order Summary:</h3>
+//               <ul style="list-style: none; padding: 0;">
+//                 <li><strong>Order ID:</strong> ${order.order_id}</li>
+//                 <li><strong>Subtotal:</strong> $${subtotal.toFixed(2)}</li>
+//                 <li><strong>Tax:</strong> $${tax.toFixed(2)}</li>
+//                 <li><strong>Discount:</strong> $${discount.toFixed(2)}</li>
+//                 <li><strong>Additional Discount:</strong> $${newAdditionalDiscount.toFixed(2)}</li>
+//                 <li><strong>Shipping Charges:</strong> $${newShipping.toFixed(2)}</li>
+//                 <li><strong>Total:</strong> $${newTotal.toFixed(2)}</li>
+//               </ul>
+//               <p><strong>Next Steps:</strong></p>
+//               <ul>
+//                 <li>You can view your updated order details at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
+//                 <li>Contact us at <a href="mailto:support@studiosignaturecabinets.com">support@studiosignaturecabinets.com</a> for questions.</li>
+//               </ul>
+//               <p>Thank you for choosing Studio Signature Cabinets!</p>
+//               <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//             </div>
+//           `,
+//         };
+
+//         try {
+//           await transporter.sendMail(mailOptions);
+//           console.log(`Update email sent to ${order.email}`);
+//         } catch (error) {
+//           console.error('Failed to send email:', error);
+//           console.error('Failed to send update email:', emailErr);
+//         }
+//       }
+
+//       console.log(`Order ${order.id} updated: shipping=${shippingAmount}, additionalDiscount=${discountAmount}, total=${totalAmount}`);
+//       res.status(200).json({
+//         message: 'Success: Order updated successfully',
+//         shipping: shippingAmount,
+//         additionalDiscount: discountAmount,
+//         total: totalAmount
+//       });
+//       console.log(`Order ${id} updated: shipping=${newShipping}, additional_discount=${newAdditionalDiscount}, total=${newTotal}`);
+//       res.json({
+//         message: "Changes updated successfully",
+//         shipping: newShipping,
+//         additional_discount: newAdditionalDiscount,
+//         total: newTotal
+//       });
+//     } catch (err) {
+//       console.error("Server error updating order:", err);
+//       res.status(500).json({ error: "Server error" });
+//     }
+//   }
+// );
+
+// app.put(
+//   "/api/admin/orders/:id/status",
+//   adminauthenticateToken,
+//   async (req, res) => {
+//     const { id } = req.params;
+//     const { status } = req.body;
+
+//     // Validate status
+//     if (
+//       !["Pending", "Accepted", "Processing", "Completed", "Cancelled"].includes(
+//         status
+//       )
+//     ) {
+//       return res.status(400).json({
+//         error:
+//           "Invalid status. Must be Pending, Accepted, Processing, Completed, or Cancelled",
+//       });
+//     }
+
+//     try {
+//       // Check if order exists and fetch details
+//       const [orders] = await pool.query(
+//         `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option,
+//               o.subtotal, o.tax, o.shipping, o.total, u.full_name, u.email
+//        FROM orders o
+//        LEFT JOIN users u ON o.user_id = u.id
+//        WHERE o.id = ?`,
+//         [id]
+//       );
+//       if (orders.length === 0) {
+//         return res.status(404).json({ error: "Order not found" });
+//       }
+
+//       const order = orders[0];
+//       const user = {
+//         full_name: order.full_name || "Customer",
+//         email: order.email || "N/A",
+//       };
+
+//       // Update status
+//       await pool.query("UPDATE orders SET status = ? WHERE id = ?", [
+//         status,
+//         id,
+//       ]);
+
+//       // Send email if status is Accepted
+//       if (status === "Accepted") {
+//         const mailOptions = {
+//           from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//           to: user.email,
+//           subject: `Your Order #${order.order_id} Has Been Accepted!`,
+//           html: `
+//           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//             <h2>Hello, ${user.full_name}!</h2>
+//             <p>Great news! Your order <strong>#${
+//               order.order_id
+//             }</strong> has been accepted and is now being processed.</p>
+//             <h3>Order Details:</h3>
+//             <ul style="list-style: none; padding: 0;">
+//               <li><strong>Order ID:</strong> ${order.order_id}</li>
+//               <li><strong>Door Style:</strong> ${order.door_style}</li>
+//               <li><strong>Finish Type:</strong> ${order.finish_type}</li>
+//               ${
+//                 order.stain_option
+//                   ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+//                   : ""
+//               }
+//               ${
+//                 order.paint_option
+//                   ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+//                   : ""
+//               }
+//               <li><strong>Subtotal:</strong> $${parseFloat(
+//                 order.subtotal
+//               ).toFixed(2)}</li>
+//               <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+//                 2
+//               )}</li>
+//               <li><strong>Shipping:</strong> ${
+//                 order.shipping !== null
+//                   ? `$${parseFloat(order.shipping).toFixed(2)}`
+//                   : "Free"
+//               }</li>
+//               <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(
+//                 2
+//               )}</li>
+//             </ul>
+//             <p><strong>Next Steps:</strong></p>
+//             <ul>
+//               <li>Your order is now in the processing stage. We’ll notify you with updates on its progress.</li>
+//               <li>You can track your order status in your account at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
+//             </ul>
+//             <p>If you have any questions, please contact our support team at <a href="mailto:support@studiosignaturecabinets.com">support@studiosignaturecabinets.com</a>.</p>
+//             <p>Thank you for choosing Studio Signature Cabinets!</p>
+//             <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//           </div>
+//         `,
+//         };
+
+//         try {
+//           await transporter.sendMail(mailOptions);
+//         } catch (emailErr) {
+//           console.error("Failed to send order acceptance email:", emailErr);
+//           // Log error but don't fail the status update
+//         }
+//       }
+
+//       res.json({ message: "Order status updated successfully" });
+//     } catch (err) {
+//       console.error("Server error:", err);
+//       res.status(500).json({ error: "Server error" });
+//     }
+//   }
+// );
 
 app.put(
   "/api/admin/orders/:id/status",
