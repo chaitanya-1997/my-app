@@ -911,7 +911,7 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
             }
             <li><strong>Tax (7%):</strong> $${parseFloat(tax).toFixed(2)}</li>
             <li><strong>Shipping:</strong> ${
-              shipping !== null ? `$${parseFloat(shipping).toFixed(2)}` : "Free"
+              shipping !== null ? `$${parseFloat(shipping).toFixed(2)}` : "-"
             }</li>
             <li><strong>Total:</strong> $${parseFloat(total).toFixed(2)}</li>
           </ul>
@@ -1341,7 +1341,7 @@ app.put("/api/orders/:id", authenticateToken, async (req, res) => {
           )}</li>
           <li><strong>Tax (7%):</strong> $${parseFloat(tax).toFixed(2)}</li>
           <li><strong>Shipping:</strong> ${
-            shipping !== null ? `$${parseFloat(shipping).toFixed(2)}` : "Free"
+            shipping !== null ? `$${parseFloat(shipping).toFixed(2)}` : "-"
           }</li>
           <li><strong>Total:</strong> $${parseFloat(total).toFixed(2)}</li>
         </ul>
@@ -1595,7 +1595,7 @@ app.put("/api/orders/:id/cancel", authenticateToken, async (req, res) => {
         <li><strong>Shipping:</strong> ${
           order.shipping !== null
             ? `$${parseFloat(order.shipping).toFixed(2)}`
-            : "Free"
+            : "-"
         }</li>
         <li><strong>Total:</strong> $${parseFloat(order.total || 0).toFixed(
           2
@@ -2787,7 +2787,7 @@ app.put(
                   <li><strong>Shipping:</strong> ${
                     order.shipping !== null
                       ? `$${parseFloat(order.shipping).toFixed(2)}`
-                      : "Free"
+                      : "-"
                   }</li>
                   <li><strong>Total:</strong> $${parseFloat(
                     order.total
@@ -2846,7 +2846,7 @@ app.put(
                   <li><strong>Shipping:</strong> ${
                     order.shipping !== null
                       ? `$${parseFloat(order.shipping).toFixed(2)}`
-                      : "Free"
+                      : "-"
                   }</li>
                   <li><strong>Total:</strong> $${parseFloat(
                     order.total
@@ -2905,7 +2905,7 @@ app.put(
                   <li><strong>Shipping:</strong> ${
                     order.shipping !== null
                       ? `$${parseFloat(order.shipping).toFixed(2)}`
-                      : "Free"
+                      : "-"
                   }</li>
                   <li><strong>Total:</strong> $${parseFloat(
                     order.total
@@ -2964,7 +2964,7 @@ app.put(
                   <li><strong>Shipping:</strong> ${
                     order.shipping !== null
                       ? `$${parseFloat(order.shipping).toFixed(2)}`
-                      : "Free"
+                      : "-"
                   }</li>
                   <li><strong>Total:</strong> $${parseFloat(
                     order.total
@@ -3250,6 +3250,79 @@ app.delete("/api/addresses/:id", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error("Server error:", err);
     res.status(500).json({ error: "Failed to delete address." });
+  }
+});
+
+
+// POST /api/contact
+app.post('/api/contact', authenticateToken, async (req, res) => {
+  const { name, email, subject, message } = req.body;
+  const userId = req.user.id; // Extracted from JWT
+
+  // Validate input
+  if (!name || !email || !subject || !message) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
+
+  let messageId;
+  try {
+    // Insert into database (MySQL-compatible)
+    const query = `
+      INSERT INTO contact_messages (user_id, name, email, subject, message, status)
+      VALUES (?, ?, ?, ?, ?, 'pending')
+    `;
+    const values = [userId || null, name, email, subject, message];
+    const [result] = await pool.query(query, values);
+    messageId = result.insertId; // Get the inserted ID
+
+    // Send email to admin
+    const mailOptions = {
+      from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+      to: 'aashish.shroff@zeta-v.com', // Admin email
+      subject: `New Contact Form Submission: ${subject}`,
+      html: `
+        <h3>New Contact Message</h3>
+        <p><strong>User ID:</strong> ${userId || 'Guest'}</p>
+        <p><strong>Name:</strong> ${name}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Subject:</strong> ${subject}</p>
+        <p><strong>Message:</strong> ${message}</p>
+        <p><strong>Message ID:</strong> ${messageId}</p>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    // Update status
+    await pool.query("UPDATE contact_messages SET status = 'processed' WHERE id = ?", [messageId]);
+
+    res.status(200).json({ message: 'Message sent successfully' });
+  } catch (error) {
+    console.error('Error processing contact form:', error);
+    if (messageId) {
+      await pool.query("UPDATE contact_messages SET status = 'failed' WHERE id = ?", [messageId]);
+    }
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+
+// GET /api/contact/messages
+app.get('/api/admin/contact/messages', adminauthenticateToken, async (req, res) => {
+  try {
+    const query = `
+      SELECT id, user_id, name, email, subject, message, status, created_at
+      FROM contact_messages
+      ORDER BY created_at DESC
+    `;
+    const [messages] = await pool.query(query);
+    res.status(200).json(messages);
+  } catch (error) {
+    console.error('Error fetching contact messages:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
   }
 });
 
