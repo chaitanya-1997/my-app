@@ -144,7 +144,7 @@ app.post("/api/signup", async (req, res) => {
           <ul>
             <li>Our team will review your signup details within the next 1-2 business days.</li>
             <li>Once approved, you will receive a confirmation email with instructions to log in and access your account.</li>
-            <li>If you have any urgent questions, please contact our support team at <a href="mailto:support@studiosignaturecabinets.com">support@studiosignaturecabinets.com</a>.</li>
+            <li>If you have any urgent questions, please contact our support team at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</li>
           </ul>
           <h3>Your Signup Details:</h3>
           <ul style="list-style: none; padding: 0;">
@@ -1808,7 +1808,7 @@ app.post("/api/admin/register", async (req, res) => {
           <p style="text-align: center;">
             <a href="http://localhost:3005/admin/login" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Log In Now</a>
           </p>
-          <p>For support, contact us at <a href="mailto:support@studiosignaturecabinets.com">support@studiosignaturecabinets.com</a>.</p>
+          <p>For support, contact us at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
           <p>Best regards,<br>Team Studio Signature Cabinets</p>
         </div>
       `,
@@ -2180,7 +2180,7 @@ app.put(
                 user.user_type.charAt(0).toUpperCase() + user.user_type.slice(1)
               }</li>
             </ul>
-            <p>If you have any questions, please contact our support team at <a href="mailto:support@studiosignaturecabinets.com">support@studiosignaturecabinets.com</a>.</p>
+            <p>If you have any questions, please contact our support team at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
             <p>Best regards,<br>Team Studio Signature Cabinets</p>
           </div>
         `,
@@ -2497,7 +2497,7 @@ app.post("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
               <p><strong>Next Steps:</strong></p>
               <ul>
                 <li>You can view your updated order details at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
-                <li>Contact us at <a href="mailto:support@studiosignaturecabinets.com">support@studiosignaturecabinets.com</a> for questions.</li>
+                <li>Contact us at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a> for questions.</li>
               </ul>
               <p>Thank you for choosing Studio Signature Cabinets!</p>
               <p>Best regards,<br>Team Studio Signature Cabinets</p>
@@ -2653,7 +2653,7 @@ app.put(
               <p><strong>Next Steps:</strong></p>
               <ul>
                 <li>You can view your updated order details at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
-                <li>Contact us at <a href="mailto:support@studiosignaturecabinets.com">support@studiosignaturecabinets.com</a> for questions.</li>
+                <li>Contact us at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a> for questions.</li>
               </ul>
               <p>Thank you for choosing Studio Signature Cabinets!</p>
               <p>Best regards,<br>Team Studio Signature Cabinets</p>
@@ -2798,7 +2798,7 @@ app.put(
                   <li>Your order is now in the processing stage. We’ll notify you with updates on its progress.</li>
                   <li>You can track your order status in your account at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
                 </ul>
-                <p>If you have any questions, please contact our support team at <a href="mailto:support@studiosignaturecabinets.com">support@studiosignaturecabinets.com</a>.</p>
+                <p>If you have any questions, please contact our support team at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
                 <p>Thank you for choosing Studio Signature Cabinets!</p>
                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
               </div>
@@ -2857,7 +2857,7 @@ app.put(
                   <li>We are preparing your order for shipment. You’ll receive a shipping confirmation soon.</li>
                   <li>Track your order status at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
                 </ul>
-                <p>For inquiries, contact us at <a href="mailto:support@studiosignaturecabinets.com">support@studiosignaturecabinets.com</a>.</p>
+                <p>For inquiries, contact us at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
                 <p>Thank you for your patience!</p>
                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
               </div>
@@ -2916,7 +2916,7 @@ app.put(
                   <li>Your order has been shipped. Check your email for tracking information.</li>
                   <li>View your order history at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
                 </ul>
-                <p>If you have any issues, contact us at <a href="mailto:support@studiosignaturecabinets.com">support@studiosignaturecabinets.com</a>.</p>
+                <p>If you have any issues, contact us at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
                 <p>Enjoy your new cabinets!</p>
                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
               </div>
@@ -2972,7 +2972,7 @@ app.put(
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
-                  <li>If this was unexpected, please contact us immediately at <a href="mailto:support@studiosignaturecabinets.com">support@studiosignaturecabinets.com</a>.</li>
+                  <li>If this was unexpected, please contact us immediately at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</li>
                   <li>Explore our products to place a new order at <a href="https://studiosignaturecabinets.com">Studio Signature Cabinets</a>.</li>
                 </ul>
                 <p>We apologize for any inconvenience. Let us know how we can assist you further.</p>
