@@ -6,6 +6,7 @@ const cors = require("cors");
 const nodemailer = require("nodemailer");
 const crypto = require('crypto');
 const base64url = require('base64url');
+
 const app = express();
 const port = 3005;
 const SALT_ROUNDS = 10;
@@ -3740,55 +3741,99 @@ app.get('/api/admin/contact/messages', adminauthenticateToken, async (req, res) 
 
 
 
+// app.post('/api/forgot-password', async (req, res) => {
+//   const { email } = req.body;
+
+//   if (!email) {
+//     return res.status(400).json({ error: 'Email is required' });
+//   }
+//   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+//     return res.status(400).json({ error: 'Invalid email format' });
+//   }
+
+//   try {
+//     // Check if user exists
+//     const [users] = await pool.query('SELECT id, full_name FROM users WHERE email = ?', [email]);
+//     if (users.length === 0) {
+//       return res.status(404).json({ error: 'User not found' });
+//     }
+
+//     const user = users[0];
+//     // Generate reset token
+//     const resetToken = crypto.randomBytes(32).toString('hex');
+//     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiry
+
+//     // Store token
+//     await pool.query(
+//       'INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)',
+//       [email, resetToken, expiresAt]
+//     );
+
+//     // Encode token and email as Base64
+//     const data = { token: resetToken, email };
+//     const encodedData = Buffer.from(JSON.stringify(data)).toString('base64');
+
+//     // Send email
+//     const resetLink = `https://studiosignaturecabinets.com/customer/reset-password?data=${encodeURIComponent(encodedData)}`;
+//     const mailOptions = {
+//       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//       to: email,
+//       subject: 'Password Reset Request',
+//       html: `
+//         <h3>Password Reset Request</h3>
+//         <p>Dear ${user.full_name || 'User'},</p>
+//         <p>We received a request to reset your password. Click the link below to set a new password:</p>
+//         <a href="${resetLink}" style="display: inline-block; padding: 10px 20px; color: #fff; background-color: #007bff; text-decoration: none; border-radius: 5px;">Reset Password</a>
+//         <p>This link will expire in 1 hour. If you didn’t request this, please ignore this email.</p>
+//         <p>Best regards,<br>Studio Signature Cabinets Team</p>
+//       `,
+//     };
+
+//     await transporter.sendMail(mailOptions);
+//     res.status(200).json({ message: 'Password reset email sent successfully' });
+//   } catch (error) {
+//     console.error('Error processing forgot password:', error);
+//     res.status(500).json({ error: 'Failed to send password reset email' });
+//   }
+// });
+
+
+
 app.post('/api/forgot-password', async (req, res) => {
   const { email } = req.body;
-
-  if (!email) {
-    return res.status(400).json({ error: 'Email is required' });
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ error: 'Invalid email format' });
-  }
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email format' });
 
   try {
-    // Check if user exists
     const [users] = await pool.query('SELECT id, full_name FROM users WHERE email = ?', [email]);
-    if (users.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
+    if (users.length === 0) return res.status(404).json({ error: 'User not found' });
 
-    const user = users[0];
-    // Generate reset token
     const resetToken = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiry
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    await pool.query('INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)', [email, resetToken, expiresAt]);
 
-    // Store token
-    await pool.query(
-      'INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)',
-      [email, resetToken, expiresAt]
-    );
-
-    // Encode token and email as Base64
     const data = { token: resetToken, email };
-    const encodedData = Buffer.from(JSON.stringify(data)).toString('base64');
+    const encodedData = base64url.encode(JSON.stringify(data));
+    const resetLink = `https://studiosignaturecabinets.com/customer/reset-password?data=${encodedData}`; 
+    // const resetLink = `http://localhost:3000/customer/reset-password?data=${encodedData}`; 
 
-    // Send email
-    const resetLink = `https://studiosignaturecabinets.com/customer/reset-password?data=${encodeURIComponent(encodedData)}`;
+
     const mailOptions = {
-      from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+      from: `"Studio Signature Cabinets" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: 'Password Reset Request',
       html: `
         <h3>Password Reset Request</h3>
-        <p>Dear ${user.full_name || 'User'},</p>
+        <p>Dear ${users[0].full_name || 'User'},</p>
         <p>We received a request to reset your password. Click the link below to set a new password:</p>
         <a href="${resetLink}" style="display: inline-block; padding: 10px 20px; color: #fff; background-color: #007bff; text-decoration: none; border-radius: 5px;">Reset Password</a>
         <p>This link will expire in 1 hour. If you didn’t request this, please ignore this email.</p>
         <p>Best regards,<br>Studio Signature Cabinets Team</p>
       `,
     };
-
     await transporter.sendMail(mailOptions);
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.status(200).json({ message: 'Password reset email sent successfully' });
   } catch (error) {
     console.error('Error processing forgot password:', error);
