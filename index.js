@@ -4,7 +4,8 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const nodemailer = require("nodemailer");
-
+const crypto = require('crypto');
+const base64url = require('base64url');
 const app = express();
 const port = 3005;
 const SALT_ROUNDS = 10;
@@ -203,7 +204,7 @@ app.post("/api/signup", async (req, res) => {
           </ul>
           <p><strong>Action Required:</strong> Please review this user and update their status in the admin panel.</p>
           <p style="text-align: center;">
-            <a href="http://localhost:3005/admin/users/${userId}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Review User</a>
+            <a href="https://studiosignaturecabinets.com/admin/login" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Review User</a>
           </p>
           <p>For further details, check the admin panel or contact the user directly at ${email}.</p>
         </div>
@@ -239,48 +240,105 @@ app.post("/api/signup", async (req, res) => {
 
 // Login API
 
-app.post("/api/login", async (req, res) => {
+// app.post("/api/login", async (req, res) => {
+//   const { email, password } = req.body;
+
+//   try {
+//     const [users] = await pool.query("SELECT * FROM users WHERE email = ?", [
+//       email,
+//     ]);
+
+//     if (users.length === 0) {
+//       return res.status(401).json({ error: "Invalid email or password" });
+//     }
+
+//     const user = users[0];
+
+//     // Check if user is active
+//     if (!user.is_active) {
+//       return res.status(403).json({ error: "Account is inactive" });
+//     }
+//     if (!user.account_status || user.account_status !== "Active") {
+//       return res.status(403).json({ error: "Account is inactive" });
+//     }
+
+//     // Check if user is a customer (not a vendor)
+//     if (user.user_type !== "customer") {
+//       return res.status(403).json({ error: "Only customers can log in" });
+//     }
+
+//     const isMatch = await bcrypt.compare(password, user.password);
+
+//     if (!isMatch) {
+//       return res.status(401).json({ error: "Invalid email or password" });
+//     }
+
+//     // Update last login
+//     await pool.query("UPDATE users SET last_login = NOW() WHERE id = ?", [
+//       user.id,
+//     ]);
+
+//     // Create JWT
+//     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
+//       expiresIn: "1d",
+//     });
+
+//     res.json({
+//       token,
+//       user: {
+//         id: user.id,
+//         email: user.email,
+//         full_name: user.full_name,
+//         user_type: user.user_type,
+//       },
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+
+app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    const [users] = await pool.query("SELECT * FROM users WHERE email = ?", [
-      email,
-    ]);
+    const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
 
     if (users.length === 0) {
-      return res.status(401).json({ error: "Invalid email or password" });
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     const user = users[0];
 
     // Check if user is active
     if (!user.is_active) {
-      return res.status(403).json({ error: "Account is inactive" });
+      return res.status(403).json({ error: 'Account is inactive' });
     }
-    if (!user.account_status || user.account_status !== "Active") {
-      return res.status(403).json({ error: "Account is inactive" });
+    if (!user.account_status || user.account_status !== 'Active') {
+      return res.status(403).json({ error: 'Account is inactive' });
     }
 
-    // Check if user is a customer (not a vendor)
-    if (user.user_type !== "customer") {
-      return res.status(403).json({ error: "Only customers can log in" });
+    // Check if user is a customer
+    if (user.user_type !== 'customer') {
+      return res.status(403).json({ error: 'Only customers can log in' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      return res.status(401).json({ error: "Invalid email or password" });
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     // Update last login
-    await pool.query("UPDATE users SET last_login = NOW() WHERE id = ?", [
-      user.id,
-    ]);
+    await pool.query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
 
-    // Create JWT
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
-      expiresIn: "1d",
-    });
+    // Create JWT with token_version
+    const token = jwt.sign(
+      { id: user.id, email: user.email, token_version: user.token_version },
+      JWT_SECRET,
+      { expiresIn: '1d' }
+    );
 
     res.json({
       token,
@@ -292,9 +350,30 @@ app.post("/api/login", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Server error' });
   }
+});
+
+// POST /api/logout
+app.post('/api/logout', authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    // Increment token_version to invalidate existing tokens
+    await pool.query('UPDATE users SET token_version = token_version + 1 WHERE id = ?', [userId]);
+
+    // Add cache-control headers
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.status(200).json({ message: 'Logged out successfully' });
+  } catch (err) {
+    console.error('Logout error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/verify-token', authenticateToken, async (req, res) => {
+  res.json({ user: { id: req.user.id, email: req.user.email } });
 });
 
 // Get User Profile API
@@ -376,20 +455,76 @@ app.put("/api/profile", authenticateToken, async (req, res) => {
 });
 
 // Change Password API
-app.put("/api/password", authenticateToken, async (req, res) => {
+// app.put("/api/password", authenticateToken, async (req, res) => {
+//   const { currentPassword, newPassword, confirmPassword } = req.body;
+//   const userId = req.user.id;
+
+//   try {
+//     // Validate input
+//     if (!currentPassword || !newPassword || !confirmPassword) {
+//       return res
+//         .status(400)
+//         .json({ error: "All password fields are required" });
+//     }
+
+//     if (newPassword !== confirmPassword) {
+//       return res.status(400).json({ error: "New passwords do not match" });
+//     }
+
+//     // Password validation regex
+//     const passwordRegex =
+//       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
+//     if (!passwordRegex.test(newPassword) || /\s/.test(newPassword)) {
+//       return res.status(400).json({
+//         error:
+//           "Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces",
+//       });
+//     }
+
+//     // Fetch current user
+//     const [users] = await pool.query(
+//       "SELECT password FROM users WHERE id = ?",
+//       [userId]
+//     );
+//     if (users.length === 0) {
+//       return res.status(404).json({ error: "User not found" });
+//     }
+
+//     // Verify current password
+//     const isMatch = await bcrypt.compare(currentPassword, users[0].password);
+//     if (!isMatch) {
+//       return res.status(401).json({ error: "Current password is incorrect" });
+//     }
+
+//     // Hash new password
+//     const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+//     // Update password
+//     await pool.query("UPDATE users SET password = ? WHERE id = ?", [
+//       hashedPassword,
+//       userId,
+//     ]);
+
+//     res.json({ message: "Password updated successfully" });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+// PUT /api/password
+app.put('/api/password', authenticateToken, async (req, res) => {
   const { currentPassword, newPassword, confirmPassword } = req.body;
   const userId = req.user.id;
 
   try {
     // Validate input
     if (!currentPassword || !newPassword || !confirmPassword) {
-      return res
-        .status(400)
-        .json({ error: "All password fields are required" });
+      return res.status(400).json({ error: 'All password fields are required' });
     }
 
     if (newPassword !== confirmPassword) {
-      return res.status(400).json({ error: "New passwords do not match" });
+      return res.status(400).json({ error: 'New passwords do not match' });
     }
 
     // Password validation regex
@@ -398,38 +533,54 @@ app.put("/api/password", authenticateToken, async (req, res) => {
     if (!passwordRegex.test(newPassword) || /\s/.test(newPassword)) {
       return res.status(400).json({
         error:
-          "Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces",
+          'Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces',
       });
     }
 
     // Fetch current user
-    const [users] = await pool.query(
-      "SELECT password FROM users WHERE id = ?",
-      [userId]
-    );
+    const [users] = await pool.query('SELECT password, email, full_name FROM users WHERE id = ?', [
+      userId,
+    ]);
     if (users.length === 0) {
-      return res.status(404).json({ error: "User not found" });
+      return res.status(404).json({ error: 'User not found' });
     }
 
+    const user = users[0];
+
     // Verify current password
-    const isMatch = await bcrypt.compare(currentPassword, users[0].password);
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) {
-      return res.status(401).json({ error: "Current password is incorrect" });
+      return res.status(401).json({ error: 'Current password is incorrect' });
     }
 
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     // Update password
-    await pool.query("UPDATE users SET password = ? WHERE id = ?", [
-      hashedPassword,
-      userId,
-    ]);
+    await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, userId]);
 
-    res.json({ message: "Password updated successfully" });
+    // Send confirmation email
+    const mailOptions = {
+      from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+      to: user.email,
+      subject: 'Password Change Confirmation',
+      html: `
+        <h3>Password Change Confirmation</h3>
+        <p>Dear ${user.full_name || 'User'},</p>
+        <p>Your password was successfully changed on ${new Date().toLocaleString('en-US', {
+          timeZone: 'Asia/Kolkata',
+        })} IST.</p>
+        <p>If you did not perform this action, please contact our support team immediately at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+        <p>Best regards,<br>Studio Signature Cabinets Team</p>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.json({ message: 'Password updated successfully' });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+    console.error('Error updating password:', err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -1806,7 +1957,7 @@ app.post("/api/admin/register", async (req, res) => {
           </ul>
           <p>You can now log in to the admin panel:</p>
           <p style="text-align: center;">
-            <a href="http://localhost:3005/admin/login" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Log In Now</a>
+            <a href="https://studiosignaturecabinets.com/admin/login" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Log In Now</a>
           </p>
           <p>For support, contact us at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
           <p>Best regards,<br>Team Studio Signature Cabinets</p>
@@ -1833,7 +1984,7 @@ app.post("/api/admin/register", async (req, res) => {
           </ul>
           <p>Review this admin in the admin panel:</p>
           <p style="text-align: center;">
-            <a href="http://localhost:3005/admin/admins/${adminId}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View Admin</a>
+            <a href="https://studiosignaturecabinets.com/admin/login" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View Admin</a>
           </p>
         </div>
       `,
@@ -1995,42 +2146,96 @@ app.put("/api/admin/profile", adminauthenticateToken, async (req, res) => {
 });
 
 // Update Admin Password
-app.put("/api/admin/password", adminauthenticateToken, async (req, res) => {
+
+// app.put("/api/admin/password", adminauthenticateToken, async (req, res) => {
+//   const { currentPassword, newPassword, confirmPassword } = req.body;
+
+//   // Validation
+//   if (!currentPassword || !newPassword || !confirmPassword) {
+//     return res.status(400).json({ error: "All password fields are required" });
+//   }
+//   if (newPassword.length < 8) {
+//     return res
+//       .status(400)
+//       .json({ error: "New password must be at least 8 characters" });
+//   }
+//   if (newPassword !== confirmPassword) {
+//     return res
+//       .status(400)
+//       .json({ error: "New password and confirm password do not match" });
+//   }
+
+//   try {
+//     // Fetch current password
+//     const [admins] = await pool.query(
+//       "SELECT password FROM admins WHERE id = ?",
+//       [req.admin.id]
+//     );
+
+//     if (admins.length === 0) {
+//       return res.status(404).json({ error: "Admin not found" });
+//     }
+
+//     // Verify current password
+//     const isPasswordValid = await bcrypt.compare(
+//       currentPassword,
+//       admins[0].password
+//     );
+//     if (!isPasswordValid) {
+//       return res.status(401).json({ error: "Current password is incorrect" });
+//     }
+
+//     // Hash new password
+//     const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+//     // Update password
+//     await pool.query(
+//       "UPDATE admins SET password = ?, updated_at = NOW() WHERE id = ?",
+//       [hashedPassword, req.admin.id]
+//     );
+
+//     res.json({ message: "Password updated successfully" });
+//   } catch (err) {
+//     console.error("Server error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+
+app.put('/api/admin/password', adminauthenticateToken, async (req, res) => {
   const { currentPassword, newPassword, confirmPassword } = req.body;
 
   // Validation
   if (!currentPassword || !newPassword || !confirmPassword) {
-    return res.status(400).json({ error: "All password fields are required" });
+    return res.status(400).json({ error: 'All password fields are required' });
   }
-  if (newPassword.length < 8) {
-    return res
-      .status(400)
-      .json({ error: "New password must be at least 8 characters" });
+
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
+  if (!passwordRegex.test(newPassword) || /\s/.test(newPassword)) {
+    return res.status(400).json({
+      error: 'Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces',
+    });
   }
+
   if (newPassword !== confirmPassword) {
-    return res
-      .status(400)
-      .json({ error: "New password and confirm password do not match" });
+    return res.status(400).json({ error: 'New password and confirm password do not match' });
   }
 
   try {
-    // Fetch current password
+    // Fetch current password and email
     const [admins] = await pool.query(
-      "SELECT password FROM admins WHERE id = ?",
+      'SELECT id, password, email FROM admins WHERE id = ?',
       [req.admin.id]
     );
 
     if (admins.length === 0) {
-      return res.status(404).json({ error: "Admin not found" });
+      return res.status(404).json({ error: 'Admin not found' });
     }
 
     // Verify current password
-    const isPasswordValid = await bcrypt.compare(
-      currentPassword,
-      admins[0].password
-    );
+    const isPasswordValid = await bcrypt.compare(currentPassword, admins[0].password);
     if (!isPasswordValid) {
-      return res.status(401).json({ error: "Current password is incorrect" });
+      return res.status(401).json({ error: 'Current password is incorrect' });
     }
 
     // Hash new password
@@ -2038,16 +2243,143 @@ app.put("/api/admin/password", adminauthenticateToken, async (req, res) => {
 
     // Update password
     await pool.query(
-      "UPDATE admins SET password = ?, updated_at = NOW() WHERE id = ?",
+      'UPDATE admins SET password = ?, updated_at = NOW() WHERE id = ?',
       [hashedPassword, req.admin.id]
     );
 
-    res.json({ message: "Password updated successfully" });
+    // Send confirmation email
+    await transporter.sendMail({
+      from: `"Studio Signature Cabinets" <sssdemo6@gmail.com>`,
+      to: admins[0].email,
+      subject: 'Admin Password Update Confirmation',
+      html: `
+        <p>Your admin account password has been successfully updated.</p>
+        <p>If you did not perform this action, please contact support immediately.</p>
+      `,
+    });
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.json({ message: 'Password updated successfully' });
   } catch (err) {
-    console.error("Server error:", err);
-    res.status(500).json({ error: "Server error" });
+    console.error('Server error:', err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
+
+
+app.post('/api/admin/forgot-password', async (req, res) => {
+  const { email } = req.body;
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Valid email is required' });
+  }
+
+  try {
+    const [admins] = await pool.query('SELECT id, email FROM admins WHERE email = ?', [email]);
+    if (admins.length === 0) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 3600000); // 1 hour
+
+    await pool.query(
+      'INSERT INTO admin_password_resets (email, token, created_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE token = ?, created_at = ?',
+      [email, token, new Date(), token, new Date()]
+    );
+
+    const resetData = { token, email };
+    const encodedData = base64url.encode(JSON.stringify(resetData));
+    const resetLink = `https://studiosignaturecabinets.com/admin/reset-password?data=${encodedData}`;
+
+    await transporter.sendMail({
+      from: `"Studio Signature Cabinets" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Admin Password Reset Request',
+      html: `
+        <p>You requested a password reset for your admin account.</p>
+        <p>Click <a href="${resetLink}">here</a> to reset your password.</p>
+        <p>This link will expire in 1 hour.</p>
+        <p>If you did not request this, please ignore this email.</p>
+      `,
+    });
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.json({ message: 'Password reset email sent successfully' });
+  } catch (err) {
+    console.error('Server error:', err);
+    res.status(500).json({ error: 'Failed to send password reset email' });
+  }
+});
+
+
+// POST /api/admin/reset-password
+app.post('/api/admin/reset-password', async (req, res) => {
+  const { email, token, newPassword, confirmPassword } = req.body;
+
+  if (!email || !token || !newPassword || !confirmPassword) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({ error: 'New password and confirm password do not match' });
+  }
+
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
+  if (!passwordRegex.test(newPassword) || /\s/.test(newPassword)) {
+    return res.status(400).json({
+      error: 'Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces',
+    });
+  }
+
+  try {
+    const [resetRequests] = await pool.query(
+      'SELECT created_at FROM admin_password_resets WHERE email = ? AND token = ?',
+      [email, token]
+    );
+
+    if (resetRequests.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    const createdAt = new Date(resetRequests[0].created_at);
+    if (Date.now() - createdAt.getTime() > 3600000) { // 1 hour
+      await pool.query('DELETE FROM admin_password_resets WHERE email = ?', [email]);
+      return res.status(400).json({ error: 'Reset token has expired' });
+    }
+
+    const [admins] = await pool.query('SELECT id FROM admins WHERE email = ?', [email]);
+    if (admins.length === 0) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+    await pool.query(
+      'UPDATE admins SET password = ?, updated_at = NOW() WHERE id = ?',
+      [hashedPassword, admins[0].id]
+    );
+
+    await pool.query('DELETE FROM admin_password_resets WHERE email = ?', [email]);
+
+    await transporter.sendMail({
+      from: `"Studio Signature Cabinets" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Admin Password Reset Confirmation',
+      html: `
+        <p>Your admin account password has been successfully reset.</p>
+        <p>If you did not perform this action, please contact support immediately.</p>
+      `,
+    });
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.json({ message: 'Password reset successfully' });
+  } catch (err) {
+    console.error('Server error:', err);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
 
 // Fetch All Users
 app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
@@ -3030,68 +3362,147 @@ app.delete(
 );
 
 // POST /api/addresses - Create a new billing or shipping address
-app.post("/api/addresses", authenticateToken, async (req, res) => {
+
+// app.post("/api/addresses", authenticateToken, async (req, res) => {
+//   const { type, address } = req.body;
+//   const userId = req.user.id;
+
+//   try {
+//     // Validate inputs
+//     if (!["Billing", "Shipping"].includes(type)) {
+//       return res.status(400).json({
+//         error: 'Invalid address type. Must be "Billing" or "Shipping".',
+//       });
+//     }
+//     if (!address || !address.trim()) {
+//       return res.status(400).json({ error: "Address is required." });
+//     }
+
+//     const connection = await pool.getConnection();
+//     await connection.beginTransaction();
+
+//     try {
+//       if (type === "Billing") {
+//         // Check for existing billing address
+//         const [existingBilling] = await connection.query(
+//           "SELECT id FROM user_addresses WHERE user_id = ? AND type = ?",
+//           [userId, "Billing"]
+//         );
+
+//         if (existingBilling.length > 0) {
+//           // Update existing billing address
+//           await connection.query(
+//             "UPDATE user_addresses SET address = ?, updated_at = NOW() WHERE id = ?",
+//             [address.trim(), existingBilling[0].id]
+//           );
+//         } else {
+//           // Insert new billing address
+//           await connection.query(
+//             "INSERT INTO user_addresses (user_id, type, address) VALUES (?, ?, ?)",
+//             [userId, "Billing", address.trim()]
+//           );
+//         }
+//       } else {
+//         // Insert new shipping address (multiple allowed)
+//         await connection.query(
+//           "INSERT INTO user_addresses (user_id, type, address) VALUES (?, ?, ?)",
+//           [userId, "Shipping", address.trim()]
+//         );
+//       }
+
+//       await connection.commit();
+//       connection.release();
+
+//       res.status(201).json({ message: "Address saved successfully." });
+//     } catch (err) {
+//       await connection.rollback();
+//       connection.release();
+//       console.error("Transaction error:", err);
+//       res.status(500).json({ error: "Failed to save address." });
+//     }
+//   } catch (err) {
+//     console.error("Server error:", err);
+//     res.status(500).json({ error: "Server error." });
+//   }
+// });
+
+
+// POST /api/addresses
+app.post('/api/addresses', authenticateToken, async (req, res) => {
   const { type, address } = req.body;
   const userId = req.user.id;
 
   try {
     // Validate inputs
-    if (!["Billing", "Shipping"].includes(type)) {
+    if (!['Billing', 'Shipping'].includes(type)) {
       return res.status(400).json({
         error: 'Invalid address type. Must be "Billing" or "Shipping".',
       });
     }
     if (!address || !address.trim()) {
-      return res.status(400).json({ error: "Address is required." });
+      return res.status(400).json({ error: 'Address is required.' });
     }
 
     const connection = await pool.getConnection();
     await connection.beginTransaction();
 
     try {
-      if (type === "Billing") {
+      if (type === 'Billing') {
         // Check for existing billing address
         const [existingBilling] = await connection.query(
-          "SELECT id FROM user_addresses WHERE user_id = ? AND type = ?",
-          [userId, "Billing"]
+          'SELECT id FROM user_addresses WHERE user_id = ? AND type = ?',
+          [userId, 'Billing']
         );
 
         if (existingBilling.length > 0) {
           // Update existing billing address
           await connection.query(
-            "UPDATE user_addresses SET address = ?, updated_at = NOW() WHERE id = ?",
+            'UPDATE user_addresses SET address = ?, updated_at = NOW() WHERE id = ?',
             [address.trim(), existingBilling[0].id]
           );
         } else {
           // Insert new billing address
           await connection.query(
-            "INSERT INTO user_addresses (user_id, type, address) VALUES (?, ?, ?)",
-            [userId, "Billing", address.trim()]
+            'INSERT INTO user_addresses (user_id, type, address) VALUES (?, ?, ?)',
+            [userId, 'Billing', address.trim()]
           );
         }
       } else {
-        // Insert new shipping address (multiple allowed)
+        // Check for duplicate shipping address (case-insensitive)
+        const [existingShipping] = await connection.query(
+          'SELECT id FROM user_addresses WHERE user_id = ? AND type = ? AND LOWER(address) = LOWER(?)',
+          [userId, 'Shipping', address.trim()]
+        );
+
+        if (existingShipping.length > 0) {
+          await connection.rollback();
+          connection.release();
+          return res.status(400).json({ error: 'Duplicate shipping address not allowed.' });
+        }
+
+        // Insert new shipping address
         await connection.query(
-          "INSERT INTO user_addresses (user_id, type, address) VALUES (?, ?, ?)",
-          [userId, "Shipping", address.trim()]
+          'INSERT INTO user_addresses (user_id, type, address) VALUES (?, ?, ?)',
+          [userId, 'Shipping', address.trim()]
         );
       }
 
       await connection.commit();
       connection.release();
 
-      res.status(201).json({ message: "Address saved successfully." });
+      res.status(201).json({ message: 'Address saved successfully.' });
     } catch (err) {
       await connection.rollback();
       connection.release();
-      console.error("Transaction error:", err);
-      res.status(500).json({ error: "Failed to save address." });
+      console.error('Transaction error:', err);
+      res.status(500).json({ error: 'Failed to save address.' });
     }
   } catch (err) {
-    console.error("Server error:", err);
-    res.status(500).json({ error: "Server error." });
+    console.error('Server error:', err);
+    res.status(500).json({ error: 'Server error.' });
   }
 });
+
 
 // GET /api/addresses - Retrieve all addresses for the user
 app.get("/api/addresses", authenticateToken, async (req, res) => {
@@ -3325,6 +3736,140 @@ app.get('/api/admin/contact/messages', adminauthenticateToken, async (req, res) 
     res.status(500).json({ error: 'Failed to fetch messages' });
   }
 });
+
+
+
+
+app.post('/api/forgot-password', async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
+
+  try {
+    // Check if user exists
+    const [users] = await pool.query('SELECT id, full_name FROM users WHERE email = ?', [email]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = users[0];
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiry
+
+    // Store token
+    await pool.query(
+      'INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)',
+      [email, resetToken, expiresAt]
+    );
+
+    // Encode token and email as Base64
+    const data = { token: resetToken, email };
+    const encodedData = Buffer.from(JSON.stringify(data)).toString('base64');
+
+    // Send email
+    const resetLink = `https://studiosignaturecabinets.com/customer/reset-password?data=${encodeURIComponent(encodedData)}`;
+    const mailOptions = {
+      from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+      to: email,
+      subject: 'Password Reset Request',
+      html: `
+        <h3>Password Reset Request</h3>
+        <p>Dear ${user.full_name || 'User'},</p>
+        <p>We received a request to reset your password. Click the link below to set a new password:</p>
+        <a href="${resetLink}" style="display: inline-block; padding: 10px 20px; color: #fff; background-color: #007bff; text-decoration: none; border-radius: 5px;">Reset Password</a>
+        <p>This link will expire in 1 hour. If you didn’t request this, please ignore this email.</p>
+        <p>Best regards,<br>Studio Signature Cabinets Team</p>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    res.status(200).json({ message: 'Password reset email sent successfully' });
+  } catch (error) {
+    console.error('Error processing forgot password:', error);
+    res.status(500).json({ error: 'Failed to send password reset email' });
+  }
+});
+
+
+// POST /api/reset-password
+app.post('/api/reset-password', async (req, res) => {
+  const { email, token, newPassword, confirmPassword } = req.body;
+
+  // Validate input
+  if (!email || !token || !newPassword || !confirmPassword) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({ error: 'New passwords do not match' });
+  }
+
+  // Password validation (from /api/password)
+  const passwordRegex =
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
+  if (!passwordRegex.test(newPassword) || /\s/.test(newPassword)) {
+    return res.status(400).json({
+      error:
+        'Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces',
+    });
+  }
+
+  try {
+    // Verify token
+    const [resets] = await pool.query(
+      'SELECT * FROM password_resets WHERE email = ? AND token = ? AND expires_at > NOW()',
+      [email, token]
+    );
+    if (resets.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    // Fetch user
+    const [users] = await pool.query('SELECT id, full_name FROM users WHERE email = ?', [email]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const user = users[0];
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password
+    await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, user.id]);
+
+    // Delete used token
+    await pool.query('DELETE FROM password_resets WHERE email = ? AND token = ?', [email, token]);
+
+    // Send confirmation email
+    const mailOptions = {
+      from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+      to: email,
+      subject: 'Password Reset Confirmation',
+      html: `
+        <h3>Password Reset Confirmation</h3>
+        <p>Dear ${user.full_name || 'User'},</p>
+        <p>Your password has been successfully reset on ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })} IST.</p>
+        <p>If you did not perform this action, please contact our support team immediately at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+        <p>Best regards,<br>Studio Signature Cabinets Team</p>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({ message: 'Password reset successfully' });
+  } catch (error) {
+    console.error('Error resetting password:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`Server running on http://0.0.0.0:${port}`);
