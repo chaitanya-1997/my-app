@@ -3799,8 +3799,52 @@ app.get('/api/admin/contact/messages', adminauthenticateToken, async (req, res) 
 
 
 
+// app.post('/api/forgot-password', async (req, res) => {
+//   const { email } = req.body;
+//   if (!email) return res.status(400).json({ error: 'Email is required' });
+//   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email format' });
+
+//   try {
+//     const [users] = await pool.query('SELECT id, full_name FROM users WHERE email = ?', [email]);
+//     if (users.length === 0) return res.status(404).json({ error: 'User not found' });
+
+//     const resetToken = crypto.randomBytes(32).toString('hex');
+//     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+//     await pool.query('INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)', [email, resetToken, expiresAt]);
+
+//     const data = { token: resetToken, email };
+//     const encodedData = base64url.encode(JSON.stringify(data));
+//     const resetLink = `https://studiosignaturecabinets.com/customer/reset-password?data=${encodedData}`; 
+//     // const resetLink = `http://localhost:3000/customer/reset-password?data=${encodedData}`; 
+
+
+//     const mailOptions = {
+//       from: `"Studio Signature Cabinets" <${process.env.EMAIL_USER}>`,
+//       to: email,
+//       subject: 'Password Reset Request',
+//       html: `
+//         <h3>Password Reset Request</h3>
+//         <p>Dear ${users[0].full_name || 'User'},</p>
+//         <p>We received a request to reset your password. Click the link below to set a new password:</p>
+//         <a href="${resetLink}" style="display: inline-block; padding: 10px 20px; color: #fff; background-color: #007bff; text-decoration: none; border-radius: 5px;">Reset Password</a>
+//         <p>This link will expire in 1 hour. If you didn’t request this, please ignore this email.</p>
+//         <p>Best regards,<br>Studio Signature Cabinets Team</p>
+//       `,
+//     };
+//     await transporter.sendMail(mailOptions);
+
+//     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+//     res.status(200).json({ message: 'Password reset email sent successfully' });
+//   } catch (error) {
+//     console.error('Error processing forgot password:', error);
+//     res.status(500).json({ error: 'Failed to send password reset email' });
+//   }
+// });
+
+
 app.post('/api/forgot-password', async (req, res) => {
   const { email } = req.body;
+
   if (!email) return res.status(400).json({ error: 'Email is required' });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email format' });
 
@@ -3809,14 +3853,17 @@ app.post('/api/forgot-password', async (req, res) => {
     if (users.length === 0) return res.status(404).json({ error: 'User not found' });
 
     const resetToken = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+
+    // Delete previous token
+    await pool.query('DELETE FROM password_resets WHERE email = ?', [email]);
+
+    // Insert new token
     await pool.query('INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)', [email, resetToken, expiresAt]);
 
     const data = { token: resetToken, email };
     const encodedData = base64url.encode(JSON.stringify(data));
-    const resetLink = `https://studiosignaturecabinets.com/customer/reset-password?data=${encodedData}`; 
-    // const resetLink = `http://localhost:3000/customer/reset-password?data=${encodedData}`; 
-
+    const resetLink = `https://studiosignaturecabinets.com/customer/reset-password?data=${encodedData}`;
 
     const mailOptions = {
       from: `"Studio Signature Cabinets" <${process.env.EMAIL_USER}>`,
@@ -3826,11 +3873,12 @@ app.post('/api/forgot-password', async (req, res) => {
         <h3>Password Reset Request</h3>
         <p>Dear ${users[0].full_name || 'User'},</p>
         <p>We received a request to reset your password. Click the link below to set a new password:</p>
-        <a href="${resetLink}" style="display: inline-block; padding: 10px 20px; color: #fff; background-color: #007bff; text-decoration: none; border-radius: 5px;">Reset Password</a>
+        <a href="${resetLink}" style="display:inline-block;padding:10px 20px;background-color:#007bff;color:#fff;text-decoration:none;border-radius:5px;">Reset Password</a>
         <p>This link will expire in 1 hour. If you didn’t request this, please ignore this email.</p>
         <p>Best regards,<br>Studio Signature Cabinets Team</p>
       `,
     };
+
     await transporter.sendMail(mailOptions);
 
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -3841,12 +3889,82 @@ app.post('/api/forgot-password', async (req, res) => {
   }
 });
 
-
 // POST /api/reset-password
+// app.post('/api/reset-password', async (req, res) => {
+//   const { email, token, newPassword, confirmPassword } = req.body;
+
+//   // Validate input
+//   if (!email || !token || !newPassword || !confirmPassword) {
+//     return res.status(400).json({ error: 'All fields are required' });
+//   }
+
+//   if (newPassword !== confirmPassword) {
+//     return res.status(400).json({ error: 'New passwords do not match' });
+//   }
+
+//   // Password validation (from /api/password)
+//   const passwordRegex =
+//     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
+//   if (!passwordRegex.test(newPassword) || /\s/.test(newPassword)) {
+//     return res.status(400).json({
+//       error:
+//         'Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces',
+//     });
+//   }
+
+//   try {
+//     // Verify token
+//     const [resets] = await pool.query(
+//       'SELECT * FROM password_resets WHERE email = ? AND token = ? AND expires_at > NOW()',
+//       [email, token]
+//     );
+//     if (resets.length === 0) {
+//       return res.status(400).json({ error: 'Invalid or expired reset token' });
+//     }
+
+//     // Fetch user
+//     const [users] = await pool.query('SELECT id, full_name FROM users WHERE email = ?', [email]);
+//     if (users.length === 0) {
+//       return res.status(404).json({ error: 'User not found' });
+//     }
+//     const user = users[0];
+
+//     // Hash new password
+//     const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+//     // Update password
+//     await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, user.id]);
+
+//     // Delete used token
+//     await pool.query('DELETE FROM password_resets WHERE email = ? AND token = ?', [email, token]);
+
+//     // Send confirmation email
+//     const mailOptions = {
+//       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//       to: email,
+//       subject: 'Password Reset Confirmation',
+//       html: `
+//         <h3>Password Reset Confirmation</h3>
+//         <p>Dear ${user.full_name || 'User'},</p>
+//         <p>Your password has been successfully reset on ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })} IST.</p>
+//         <p>If you did not perform this action, please contact our support team immediately at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+//         <p>Best regards,<br>Studio Signature Cabinets Team</p>
+//       `,
+//     };
+
+//     await transporter.sendMail(mailOptions);
+
+//     res.status(200).json({ message: 'Password reset successfully' });
+//   } catch (error) {
+//     console.error('Error resetting password:', error);
+//     res.status(500).json({ error: 'Failed to reset password' });
+//   }
+// });
+
+
 app.post('/api/reset-password', async (req, res) => {
   const { email, token, newPassword, confirmPassword } = req.body;
 
-  // Validate input
   if (!email || !token || !newPassword || !confirmPassword) {
     return res.status(400).json({ error: 'All fields are required' });
   }
@@ -3855,43 +3973,37 @@ app.post('/api/reset-password', async (req, res) => {
     return res.status(400).json({ error: 'New passwords do not match' });
   }
 
-  // Password validation (from /api/password)
-  const passwordRegex =
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
   if (!passwordRegex.test(newPassword) || /\s/.test(newPassword)) {
     return res.status(400).json({
-      error:
-        'Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces',
+      error: 'Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces',
     });
   }
 
   try {
-    // Verify token
+    // Log inputs
+    console.log('Reset Password Payload:', { email, token });
+
     const [resets] = await pool.query(
-      'SELECT * FROM password_resets WHERE email = ? AND token = ? AND expires_at > NOW()',
+      `SELECT * FROM password_resets WHERE email = ? AND token = ? AND expires_at > CONVERT_TZ(NOW(), 'SYSTEM', '+00:00')`,
       [email, token]
     );
+
     if (resets.length === 0) {
       return res.status(400).json({ error: 'Invalid or expired reset token' });
     }
 
-    // Fetch user
     const [users] = await pool.query('SELECT id, full_name FROM users WHERE email = ?', [email]);
     if (users.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
-    const user = users[0];
 
-    // Hash new password
+    const user = users[0];
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Update password
     await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, user.id]);
-
-    // Delete used token
     await pool.query('DELETE FROM password_resets WHERE email = ? AND token = ?', [email, token]);
 
-    // Send confirmation email
     const mailOptions = {
       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
       to: email,
