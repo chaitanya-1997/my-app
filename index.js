@@ -3492,6 +3492,319 @@ app.put(
 );
 
 
+// app.put(
+//   "/api/admin/orders/:id/status",
+//   adminauthenticateToken,
+//   async (req, res) => {
+//     const { id } = req.params;
+//     const { status } = req.body;
+
+//     // Validate status
+//     if (
+//       !["Pending", "Accepted", "Processing", "Completed", "Cancelled"].includes(
+//         status
+//       )
+//     ) {
+//       return res.status(400).json({
+//         error:
+//           "Invalid status. Must be Pending, Accepted, Processing, Completed, or Cancelled",
+//       });
+//     }
+
+//     try {
+//       // Check if order exists and fetch details
+//       const [orders] = await pool.query(
+//         `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option, 
+//               o.subtotal, o.tax, o.shipping, o.discount, o.additional_discount, o.total, u.full_name, u.email 
+//        FROM orders o 
+//        LEFT JOIN users u ON o.user_id = u.id 
+//        WHERE o.id = ?`,
+//         [id]
+//       );
+//       if (orders.length === 0) {
+//         return res.status(404).json({ error: "Order not found" });
+//       }
+
+//       const order = orders[0];
+//       const user = {
+//         full_name: order.full_name || "Customer",
+//         email: order.email || "N/A",
+//       };
+//       const additionalDiscountPercent =
+//         order.subtotal && order.additional_discount
+//           ? ((order.additional_discount / order.subtotal) * 100).toFixed(2)
+//           : "0.00";
+
+//       // Update status
+//       await pool.query("UPDATE orders SET status = ? WHERE id = ?", [
+//         status,
+//         id,
+//       ]);
+
+//       // Send email for Accepted, Processing, Completed, or Cancelled
+//       if (
+//         ["Accepted", "Processing", "Completed", "Cancelled"].includes(status) &&
+//         user.email !== "N/A"
+//       ) {
+//         let mailOptions;
+//         switch (status) {
+//           case "Accepted":
+//             mailOptions = {
+//               from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//               to: user.email,
+//               subject: `Your Order #${order.order_id} Has Been Accepted!`,
+//               html: `
+//               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//                 <h2>Hello, ${user.full_name}!</h2>
+//                 <p>Great news! Your order <strong>#${
+//                   order.order_id
+//                 }</strong> has been accepted and is now being processed.</p>
+//                 <h3>Order Details:</h3>
+//                 <ul style="list-style: none; padding: 0;">
+//                   <li><strong>Order ID:</strong> ${order.order_id}</li>
+//                   <li><strong>Door Style:</strong> ${order.door_style}</li>
+//                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
+//                   ${
+//                     order.stain_option
+//                       ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+//                       : ""
+//                   }
+//                   ${
+//                     order.paint_option
+//                       ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+//                       : ""
+//                   }
+//                   <li><strong>Subtotal:</strong> $${parseFloat(
+//                     order.subtotal
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Special Discount:</strong> $${parseFloat(
+//                     order.discount || 0
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+//                 order.additional_discount || 0
+//               ).toFixed(2)})</li>
+//                   <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+//                     2
+//                   )}</li>
+//                   <li><strong>Shipping:</strong> ${
+//                     order.shipping !== null
+//                       ? `$${parseFloat(order.shipping).toFixed(2)}`
+//                       : "-"
+//                   }</li>
+//                   <li><strong>Total:</strong> $${parseFloat(
+//                     order.total
+//                   ).toFixed(2)}</li>
+//                 </ul>
+//                 <p><strong>Next Steps:</strong></p>
+//                 <ul>
+//                   <li>Your order is now in the processing stage. We’ll notify you with updates on its progress.</li>
+//                   <li>You can track your order status in your account at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
+//                 </ul>
+//                 <p>If you have any questions, please contact our support team at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+//                 <p>Thank you for choosing Studio Signature Cabinets!</p>
+//                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//               </div>
+//             `,
+//             };
+//             break;
+//           case "Processing":
+//             mailOptions = {
+//               from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//               to: user.email,
+//               subject: `Your Order #${order.order_id} is Being Processed!`,
+//               html: `
+//               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//                 <h2>Hello, ${user.full_name}!</h2>
+//                 <p>Your order <strong>#${
+//                   order.order_id
+//                 }</strong> is now being processed. We're preparing your items for shipment.</p>
+//                 <h3>Order Details:</h3>
+//                 <ul style="list-style: none; padding: 0;">
+//                   <li><strong>Order ID:</strong> ${order.order_id}</li>
+//                   <li><strong>Door Style:</strong> ${order.door_style}</li>
+//                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
+//                   ${
+//                     order.stain_option
+//                       ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+//                       : ""
+//                   }
+//                   ${
+//                     order.paint_option
+//                       ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+//                       : ""
+//                   }
+//                   <li><strong>Subtotal:</strong> $${parseFloat(
+//                     order.subtotal
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Special Discount:</strong> $${parseFloat(
+//                     order.discount || 0
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+//                 order.additional_discount || 0
+//               ).toFixed(2)})</li>
+//                   <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+//                     2
+//                   )}</li>
+//                   <li><strong>Shipping:</strong> ${
+//                     order.shipping !== null
+//                       ? `$${parseFloat(order.shipping).toFixed(2)}`
+//                       : "-"
+//                   }</li>
+//                   <li><strong>Total:</strong> $${parseFloat(
+//                     order.total
+//                   ).toFixed(2)}</li>
+//                 </ul>
+//                 <p><strong>Next Steps:</strong></p>
+//                 <ul>
+//                   <li>We are preparing your order for shipment. You’ll receive a shipping confirmation soon.</li>
+//                   <li>Track your order status at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
+//                 </ul>
+//                 <p>For inquiries, contact us at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+//                 <p>Thank you for your patience!</p>
+//                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//               </div>
+//             `,
+//             };
+//             break;
+//           case "Completed":
+//             mailOptions = {
+//               from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//               to: user.email,
+//               subject: `Your Order #${order.order_id} Has Been Completed!`,
+//               html: `
+//               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//                 <h2>Hello, ${user.full_name}!</h2>
+//                 <p>Fantastic news! Your order <strong>#${
+//                   order.order_id
+//                 }</strong> has been completed and shipped.</p>
+//                 <h3>Order Details:</h3>
+//                 <ul style="list-style: none; padding: 0;">
+//                   <li><strong>Order ID:</strong> ${order.order_id}</li>
+//                   <li><strong>Door Style:</strong> ${order.door_style}</li>
+//                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
+//                   ${
+//                     order.stain_option
+//                       ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+//                       : ""
+//                   }
+//                   ${
+//                     order.paint_option
+//                       ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+//                       : ""
+//                   }
+//                   <li><strong>Subtotal:</strong> $${parseFloat(
+//                     order.subtotal
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Special Discount:</strong> $${parseFloat(
+//                     order.discount || 0
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+//                 order.additional_discount || 0
+//               ).toFixed(2)})</li>
+//                   <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+//                     2
+//                   )}</li>
+//                   <li><strong>Shipping:</strong> ${
+//                     order.shipping !== null
+//                       ? `$${parseFloat(order.shipping).toFixed(2)}`
+//                       : "-"
+//                   }</li>
+//                   <li><strong>Total:</strong> $${parseFloat(
+//                     order.total
+//                   ).toFixed(2)}</li>
+//                 </ul>
+//                 <p><strong>Next Steps:</strong></p>
+//                 <ul>
+//                   <li>Your order has been shipped. Check your email for tracking information.</li>
+//                   <li>View your order history at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
+//                 </ul>
+//                 <p>If you have any issues, contact us at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+//                 <p>Enjoy your new cabinets!</p>
+//                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//               </div>
+//             `,
+//             };
+//             break;
+//           case "Cancelled":
+//             mailOptions = {
+//               from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//               to: user.email,
+//               subject: `Your Order #${order.order_id} Has Been Cancelled`,
+//               html: `
+//               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//                 <h2>Hello, ${user.full_name}!</h2>
+//                 <p>We’re sorry to inform you that your order <strong>#${
+//                   order.order_id
+//                 }</strong> has been cancelled.</p>
+//                 <h3>Order Details:</h3>
+//                 <ul style="list-style: none; padding: 0;">
+//                   <li><strong>Order ID:</strong> ${order.order_id}</li>
+//                   <li><strong>Door Style:</strong> ${order.door_style}</li>
+//                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
+//                   ${
+//                     order.stain_option
+//                       ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+//                       : ""
+//                   }
+//                   ${
+//                     order.paint_option
+//                       ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+//                       : ""
+//                   }
+//                   <li><strong>Subtotal:</strong> $${parseFloat(
+//                     order.subtotal
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Special Discount:</strong> $${parseFloat(
+//                     order.discount || 0
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+//                 order.additional_discount || 0
+//               ).toFixed(2)})</li>
+//                   <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+//                     2
+//                   )}</li>
+//                   <li><strong>Shipping:</strong> ${
+//                     order.shipping !== null
+//                       ? `$${parseFloat(order.shipping).toFixed(2)}`
+//                       : "-"
+//                   }</li>
+//                   <li><strong>Total:</strong> $${parseFloat(
+//                     order.total
+//                   ).toFixed(2)}</li>
+//                 </ul>
+//                 <p><strong>Next Steps:</strong></p>
+//                 <ul>
+//                   <li>If this was unexpected, please contact us immediately at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</li>
+//                   <li>Explore our products to place a new order at <a href="https://studiosignaturecabinets.com">Studio Signature Cabinets</a>.</li>
+//                 </ul>
+//                 <p>We apologize for any inconvenience. Let us know how we can assist you further.</p>
+//                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//               </div>
+//             `,
+//             };
+//             break;
+//         }
+
+//         try {
+//           await transporter.sendMail(mailOptions);
+//           console.log(
+//             `Email sent for order ${order.order_id} status: ${status}`
+//           );
+//         } catch (emailErr) {
+//           console.error(`Failed to send email for ${status} status:`, emailErr);
+//           // Log error but don't fail the status update
+//         }
+//       }
+
+//       res.json({ message: "Order status updated successfully" });
+//     } catch (err) {
+//       console.error("Server error:", err);
+//       res.status(500).json({ error: "Server error" });
+//     }
+//   }
+// );
+
+
 app.put(
   "/api/admin/orders/:id/status",
   adminauthenticateToken,
@@ -3501,9 +3814,7 @@ app.put(
 
     // Validate status
     if (
-      !["Pending", "Accepted", "Processing", "Completed", "Cancelled"].includes(
-        status
-      )
+      !["Pending", "Accepted", "Processing", "Completed", "Cancelled"].includes(status)
     ) {
       return res.status(400).json({
         error:
@@ -3515,10 +3826,11 @@ app.put(
       // Check if order exists and fetch details
       const [orders] = await pool.query(
         `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option, 
-              o.subtotal, o.tax, o.shipping, o.discount, o.additional_discount, o.total, u.full_name, u.email 
-       FROM orders o 
-       LEFT JOIN users u ON o.user_id = u.id 
-       WHERE o.id = ?`,
+                o.subtotal, o.tax, o.shipping, o.discount, o.additional_discount, o.total, o.status, 
+                u.full_name, u.email 
+         FROM orders o 
+         LEFT JOIN users u ON o.user_id = u.id 
+         WHERE o.id = ?`,
         [id]
       );
       if (orders.length === 0) {
@@ -3526,6 +3838,14 @@ app.put(
       }
 
       const order = orders[0];
+
+      // Prevent status changes if order is Cancelled
+      if (order.status === "Cancelled") {
+        return res.status(400).json({
+          error: "Cannot update status of a cancelled order",
+        });
+      }
+
       const user = {
         full_name: order.full_name || "Customer",
         email: order.email || "N/A",
@@ -3556,44 +3876,20 @@ app.put(
               html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>Great news! Your order <strong>#${
-                  order.order_id
-                }</strong> has been accepted and is now being processed.</p>
+                <p>Great news! Your order <strong>#${order.order_id}</strong> has been accepted and is now being processed.</p>
                 <h3>Order Details:</h3>
                 <ul style="list-style: none; padding: 0;">
                   <li><strong>Order ID:</strong> ${order.order_id}</li>
                   <li><strong>Door Style:</strong> ${order.door_style}</li>
                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
-                  ${
-                    order.stain_option
-                      ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
-                      : ""
-                  }
-                  ${
-                    order.paint_option
-                      ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
-                      : ""
-                  }
-                  <li><strong>Subtotal:</strong> $${parseFloat(
-                    order.subtotal
-                  ).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(
-                    order.discount || 0
-                  ).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
-                order.additional_discount || 0
-              ).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
-                    2
-                  )}</li>
-                  <li><strong>Shipping:</strong> ${
-                    order.shipping !== null
-                      ? `$${parseFloat(order.shipping).toFixed(2)}`
-                      : "-"
-                  }</li>
-                  <li><strong>Total:</strong> $${parseFloat(
-                    order.total
-                  ).toFixed(2)}</li>
+                  ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
+                  ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
+                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
+                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
+                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -3615,44 +3911,20 @@ app.put(
               html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>Your order <strong>#${
-                  order.order_id
-                }</strong> is now being processed. We're preparing your items for shipment.</p>
+                <p>Your order <strong>#${order.order_id}</strong> is now being processed. We're preparing your items for shipment.</p>
                 <h3>Order Details:</h3>
                 <ul style="list-style: none; padding: 0;">
                   <li><strong>Order ID:</strong> ${order.order_id}</li>
                   <li><strong>Door Style:</strong> ${order.door_style}</li>
                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
-                  ${
-                    order.stain_option
-                      ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
-                      : ""
-                  }
-                  ${
-                    order.paint_option
-                      ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
-                      : ""
-                  }
-                  <li><strong>Subtotal:</strong> $${parseFloat(
-                    order.subtotal
-                  ).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(
-                    order.discount || 0
-                  ).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
-                order.additional_discount || 0
-              ).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
-                    2
-                  )}</li>
-                  <li><strong>Shipping:</strong> ${
-                    order.shipping !== null
-                      ? `$${parseFloat(order.shipping).toFixed(2)}`
-                      : "-"
-                  }</li>
-                  <li><strong>Total:</strong> $${parseFloat(
-                    order.total
-                  ).toFixed(2)}</li>
+                  ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
+                  ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
+                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
+                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
+                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -3674,44 +3946,20 @@ app.put(
               html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>Fantastic news! Your order <strong>#${
-                  order.order_id
-                }</strong> has been completed and shipped.</p>
+                <p>Fantastic news! Your order <strong>#${order.order_id}</strong> has been completed and shipped.</p>
                 <h3>Order Details:</h3>
                 <ul style="list-style: none; padding: 0;">
                   <li><strong>Order ID:</strong> ${order.order_id}</li>
                   <li><strong>Door Style:</strong> ${order.door_style}</li>
                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
-                  ${
-                    order.stain_option
-                      ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
-                      : ""
-                  }
-                  ${
-                    order.paint_option
-                      ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
-                      : ""
-                  }
-                  <li><strong>Subtotal:</strong> $${parseFloat(
-                    order.subtotal
-                  ).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(
-                    order.discount || 0
-                  ).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
-                order.additional_discount || 0
-              ).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
-                    2
-                  )}</li>
-                  <li><strong>Shipping:</strong> ${
-                    order.shipping !== null
-                      ? `$${parseFloat(order.shipping).toFixed(2)}`
-                      : "-"
-                  }</li>
-                  <li><strong>Total:</strong> $${parseFloat(
-                    order.total
-                  ).toFixed(2)}</li>
+                  ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
+                  ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
+                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
+                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
+                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -3733,44 +3981,21 @@ app.put(
               html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>We’re sorry to inform you that your order <strong>#${
-                  order.order_id
-                }</strong> has been cancelled.</p>
+                <p>We’re sorry to inform you that your order <strong>#${order.order_id}</strong> has been cancelled.</p>
+                <p><strong>Note:</strong> This order cannot be reinstated or modified once cancelled.</p>
                 <h3>Order Details:</h3>
                 <ul style="list-style: none; padding: 0;">
                   <li><strong>Order ID:</strong> ${order.order_id}</li>
                   <li><strong>Door Style:</strong> ${order.door_style}</li>
                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
-                  ${
-                    order.stain_option
-                      ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
-                      : ""
-                  }
-                  ${
-                    order.paint_option
-                      ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
-                      : ""
-                  }
-                  <li><strong>Subtotal:</strong> $${parseFloat(
-                    order.subtotal
-                  ).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(
-                    order.discount || 0
-                  ).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
-                order.additional_discount || 0
-              ).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
-                    2
-                  )}</li>
-                  <li><strong>Shipping:</strong> ${
-                    order.shipping !== null
-                      ? `$${parseFloat(order.shipping).toFixed(2)}`
-                      : "-"
-                  }</li>
-                  <li><strong>Total:</strong> $${parseFloat(
-                    order.total
-                  ).toFixed(2)}</li>
+                  ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
+                  ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
+                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
+                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
+                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -3787,9 +4012,7 @@ app.put(
 
         try {
           await transporter.sendMail(mailOptions);
-          console.log(
-            `Email sent for order ${order.order_id} status: ${status}`
-          );
+          console.log(`Email sent for order ${order.order_id} status: ${status}`);
         } catch (emailErr) {
           console.error(`Failed to send email for ${status} status:`, emailErr);
           // Log error but don't fail the status update
