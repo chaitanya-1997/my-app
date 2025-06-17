@@ -298,6 +298,53 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+
+// POST /api/customer/logout
+app.post('/api/customer/logout', authenticateToken, async (req, res) => {
+ const userId = req.user.id;
+ 
+ try {
+ // Verify user is a customer
+ const [users] = await pool.query('SELECT user_type, token_version FROM users WHERE id = ?', [userId]);
+ if (users.length === 0 || users[0].user_type !== 'customer') {
+ console.log(`Logout attempt failed: User ID ${userId} is not a vendor`);
+ return res.status(403).json({ error: 'Only vendors can log out from this endpoint' });
+ }
+ 
+ // Increment token_version to invalidate existing tokens
+ await pool.query('UPDATE users SET token_version = token_version + 1 WHERE id = ?', [userId]);
+ console.log(`User ID ${userId} logged out, token_version incremented`);
+ 
+ // Add cache-control headers
+ res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+ res.status(200).json({ message: 'Logged out successfully' });
+ } catch (err) {
+ console.error('Logout error:', err);
+ res.status(500).json({ error: 'Server error' });
+ }
+});
+
+
+// customer Token Verification API
+app.get('/api/customer/verify', authenticateToken, async (req, res) => {
+ const userId = req.user.id;
+ const tokenVersion = req.user.token_version;
+ 
+ try {
+ const [users] = await pool.query('SELECT token_version, user_type FROM users WHERE id = ?', [userId]);
+ if (users.length === 0 || users[0].user_type !== 'customer') {
+ return res.status(403).json({ error: 'Invalid user' });
+ }
+ if (users[0].token_version !== tokenVersion) {
+ return res.status(401).json({ error: 'Token is invalid' });
+ }
+ res.status(200).json({ valid: true });
+ } catch (err) {
+ console.error('Token verification error:', err);
+ res.status(500).json({ error: 'Server error' });
+ }
+});
+
 // POST /api/logout
 app.post('/api/logout', authenticateToken, async (req, res) => {
   const userId = req.user.id;
