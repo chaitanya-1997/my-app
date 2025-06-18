@@ -1968,10 +1968,38 @@ app.post('/api/admin/reset-password', async (req, res) => {
 
 
 // Fetch All Users
+// app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
+//   try {
+//     const [users] = await pool.query(
+//       "SELECT id, full_name, email,phone, created_at, last_login, account_status,is_active,company_name,address,admin_discount,updated_at	 FROM users"
+//     );
+
+//     res.json({
+//       users: users.map((user) => ({
+//         id: user.id,
+//         fullName: user.full_name,
+//         email: user.email,
+//         phone: user.phone,
+//         joinDate: user.created_at,
+//         lastLogin: user.last_login || null,
+//         account_status: user.account_status,
+//         is_active: user.is_active,
+//         company_name: user.company_name,
+//         address: user.address,
+//         admin_discount: user.admin_discount,
+//         updated_at: user.updated_at,
+//       })),
+//     });
+//   } catch (err) {
+//     console.error("Server error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
 app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
   try {
     const [users] = await pool.query(
-      "SELECT id, full_name, email,phone, created_at, last_login, account_status,is_active,company_name,address,admin_discount,updated_at	 FROM users"
+      "SELECT id, full_name, email, phone, created_at, last_login, account_status, is_active, company_name, address, admin_discount, updated_at FROM users WHERE user_type = 'customer'"
     );
 
     res.json({
@@ -1995,6 +2023,147 @@ app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+
+
+// fetch all vendors
+
+// app.get("/api/admin/vendors", adminauthenticateToken, async (req, res) => {
+//   try {
+//     const [users] = await pool.query(
+//       "SELECT id, full_name, email, phone, created_at, last_login, account_status, is_active, company_name, address, admin_discount, updated_at FROM users WHERE user_type = 'vendor'"
+//     );
+
+//     res.json({
+//       users: users.map((user) => ({
+//         id: user.id,
+//         fullName: user.full_name,
+//         email: user.email,
+//         phone: user.phone,
+//         joinDate: user.created_at,
+//         lastLogin: user.last_login || null,
+//         account_status: user.account_status,
+//         is_active: user.is_active,
+//         company_name: user.company_name,
+//         address: user.address,
+//         admin_discount: user.admin_discount,
+//         updated_at: user.updated_at,
+//       })),
+//     });
+//   } catch (err) {
+//     console.error("Server error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+app.get("/api/admin/vendors", adminauthenticateToken, async (req, res) => {
+  try {
+    const [vendors] = await pool.query(
+      "SELECT id, full_name, email, phone, created_at, last_login, account_status, is_active, company_name, address, updated_at FROM users WHERE user_type = 'vendor'"
+    );
+    res.json({
+      vendors: vendors.map((vendor) => ({
+        id: vendor.id,
+        fullName: vendor.full_name,
+        email: vendor.email,
+        phone: vendor.phone,
+        joinDate: vendor.created_at,
+        lastLogin: vendor.last_login || null,
+        account_status: vendor.account_status,
+        is_active: vendor.is_active,
+        company_name: vendor.company_name,
+        address: vendor.address,
+        updated_at: vendor.updated_at,
+      })),
+    });
+  } catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.put( "/api/admin/vendor/:id/status",
+  adminauthenticateToken,
+  async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    // Validate status
+    if (!["Active", "Inactive", "Suspended"].includes(status)) {
+      return res.status(400).json({
+        error: "Invalid status. Must be Active, Inactive, or Suspended",
+      });
+    }
+
+    try {
+      // Check if vendor exists
+      const [vendors] = await pool.query(
+        "SELECT id, full_name, email, user_type FROM users WHERE id = ? AND user_type = 'vendor'",
+        [id]
+      );
+      if (vendors.length === 0) {
+        return res.status(404).json({ error: "Vendor not found" });
+      }
+
+      const vendor = vendors[0];
+      // Determine is_active based on status
+      const isActive = status === "Active" ? 1 : 0;
+
+      // Update status and is_active
+      await pool.query(
+        "UPDATE users SET account_status = ?, is_active = ? WHERE id = ? AND user_type = 'vendor'",
+        [status, isActive, id]
+      );
+
+      // Send email if status is Active
+      if (status === "Active") {
+        const mailOptions = {
+          from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+          to: vendor.email,
+          subject: "Your Studio Signature Cabinets Vendor Account Has Been Approved!",
+          html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2>Welcome, ${vendor.full_name}!</h2>
+            <p>Great news! Your <strong>${
+              vendor.user_type.charAt(0).toUpperCase() + vendor.user_type.slice(1)
+            }</strong> account with Studio Signature Cabinets has been approved.</p>
+            <p>You can now log in to your account and start exploring our platform:</p>
+            <p style="text-align: center;">
+              <a href="https://studiosignaturecabinets.com/vendor" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Log In Now</a>
+            </p>
+            <h3>Your Account Details:</h3>
+            <ul style="list-style: none; padding: 0;">
+              <li><strong>Full Name:</strong> ${vendor.full_name}</li>
+              <li><strong>Email:</strong> ${vendor.email}</li>
+              <li><strong>User Type:</strong> ${
+                vendor.user_type.charAt(0).toUpperCase() + vendor.user_type.slice(1)
+              }</li>
+            </ul>
+            <p>If you have any questions, please contact our support team at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+            <p>Best regards,<br>Team Studio Signature Cabinets</p>
+          </div>
+        `,
+        };
+
+        try {
+          await transporter.sendMail(mailOptions);
+        } catch (emailErr) {
+          console.error("Failed to send approval email:", emailErr);
+          // Log error but don't fail the status update
+        }
+      }
+
+      res.json({ message: "Vendor status updated successfully" });
+    } catch (err) {
+      console.error("Server error:", err);
+      res.status(500).json({ error: "Server error" });
+    }
+  }
+);
+
+
+
+
 
 // Update Customer Discount
 app.put(
@@ -3288,6 +3457,129 @@ app.post('/api/reset-password', async (req, res) => {
     res.status(500).json({ error: 'Failed to reset password' });
   }
 });
+
+
+//-----------------------------------------------------------------------VEndor API Endpoints-----------------------------------------------------------------------
+
+
+/////////////vendor////////////////////
+
+
+
+// Vendor Login API
+app.post('/api/vendor/login', async (req, res) => {
+ const { email, password } = req.body;
+ 
+ // Validation
+ if (!email || !password) {
+ return res.status(400).json({ error: 'Email and password are required' });
+ }
+ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+ return res.status(400).json({ error: 'Invalid email format' });
+ }
+ 
+ try {
+ // Fetch user with vendor type
+ const [users] = await pool.query('SELECT * FROM users WHERE email = ? AND user_type = ?', [email, 'vendor']);
+ 
+ if (users.length === 0) {
+ return res.status(401).json({ error: 'Invalid email or password' });
+ }
+ 
+ const vendor = users[0];
+ 
+ // Check if vendor is active
+ if (!vendor.is_active) {
+ return res.status(403).json({ error: 'Account is inactive' });
+ }
+ if (!vendor.account_status || vendor.account_status !== 'Active') {
+ return res.status(403).json({ error: 'Account is inactive' });
+ }
+ 
+ // Check if user is a vendor
+ if (vendor.user_type !== 'vendor') {
+ return res.status(403).json({ error: 'Only vendors can log in' });
+ }
+ 
+ // Verify password
+ const isMatch = await bcrypt.compare(password, vendor.password);
+ if (!isMatch) {
+ return res.status(401).json({ error: 'Invalid email or password' });
+ }
+ 
+ // Update last login
+ await pool.query('UPDATE users SET last_login = NOW() WHERE id = ?', [vendor.id]);
+ 
+ // Create JWT with token_version
+ const token = jwt.sign(
+ { id: vendor.id, email: vendor.email, token_version: vendor.token_version },
+ JWT_SECRET,
+ { expiresIn: '1d' }
+ );
+ 
+ // Respond with token and vendor details
+ res.json({
+ token,
+ vendor: {
+ id: vendor.id,
+ email: vendor.email,
+ full_name: vendor.full_name,
+ user_type: vendor.user_type,
+ },
+ });
+ } catch (err) {
+ console.error('Login error:', err);
+ res.status(500).json({ error: 'Server error' });
+ }
+});
+
+
+// POST /api/vendor/logout
+app.post('/api/vendor/logout', authenticateToken, async (req, res) => {
+ const userId = req.user.id;
+ 
+ try {
+ // Verify user is a vendor
+ const [users] = await pool.query('SELECT user_type, token_version FROM users WHERE id = ?', [userId]);
+ if (users.length === 0 || users[0].user_type !== 'vendor') {
+ console.log(`Logout attempt failed: User ID ${userId} is not a vendor`);
+ return res.status(403).json({ error: 'Only vendors can log out from this endpoint' });
+ }
+ 
+ // Increment token_version to invalidate existing tokens
+ await pool.query('UPDATE users SET token_version = token_version + 1 WHERE id = ?', [userId]);
+ console.log(`User ID ${userId} logged out, token_version incremented`);
+ 
+ // Add cache-control headers
+ res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+ res.status(200).json({ message: 'Logged out successfully' });
+ } catch (err) {
+ console.error('Logout error:', err);
+ res.status(500).json({ error: 'Server error' });
+ }
+});
+
+
+// Vendor Token Verification API
+app.get('/api/vendor/verify', authenticateToken, async (req, res) => {
+ const userId = req.user.id;
+ const tokenVersion = req.user.token_version;
+ 
+ try {
+ const [users] = await pool.query('SELECT token_version, user_type FROM users WHERE id = ?', [userId]);
+ if (users.length === 0 || users[0].user_type !== 'vendor') {
+ return res.status(403).json({ error: 'Invalid user' });
+ }
+ if (users[0].token_version !== tokenVersion) {
+ return res.status(401).json({ error: 'Token is invalid' });
+ }
+ res.status(200).json({ valid: true });
+ } catch (err) {
+ console.error('Token verification error:', err);
+ res.status(500).json({ error: 'Server error' });
+ }
+});
+
 
 
 
