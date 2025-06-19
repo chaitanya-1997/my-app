@@ -6,7 +6,12 @@ const cors = require("cors");
 const nodemailer = require("nodemailer");
 const crypto = require('crypto');
 const base64url = require('base64url');
+const cron = require("node-cron");
+const path = require("path");
+const fs = require("fs").promises;
+const multer = require("multer");
 
+const router = express.Router();
 const app = express();
 const port = 3005;
 const SALT_ROUNDS = 10;
@@ -64,6 +69,44 @@ const transporter = nodemailer.createTransport({
     pass: "qhxc jbqc kami owim",
   },
 });
+
+// Serve uploads directory statically from public_html/uploads
+app.use("/uploads", express.static(path.join(__dirname, "../../public_html/uploads")));
+
+
+// Multer storage configuration
+const storage = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    const uploadDir = path.join(__dirname, "../../public_html/uploads");
+    try {
+      await fs.mkdir(uploadDir, { recursive: true });
+      cb(null, uploadDir);
+    } catch (err) {
+      console.error("Multer destination error:", err);
+      cb(err);
+    }
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${Date.now()}-${Math.random().toString(36).substring(2, 9)}${ext}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    const filetypes = /jpeg|jpg|png|mp4/;
+    const mimetype = filetypes.test(file.mimetype);
+    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+    if (mimetype && extname) return cb(null, true);
+    cb(new Error("Invalid file type. Only JPEG, PNG, and MP4 allowed."));
+  },
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
+});
+
+
+//---------------------------------Customer ApI---------------------------------  
+
 
 //Signup API
 
@@ -1538,6 +1581,443 @@ app.get("/api/user-stats", authenticateToken, async (req, res) => {
   }
 });
 
+
+
+// POST /api/addresses - Create a new billing or shipping address
+
+
+// POST /api/addresses
+app.post('/api/addresses', authenticateToken, async (req, res) => {
+  const { type, address } = req.body;
+  const userId = req.user.id;
+
+  try {
+    // Validate inputs
+    if (!['Billing', 'Shipping'].includes(type)) {
+      return res.status(400).json({
+        error: 'Invalid address type. Must be "Billing" or "Shipping".',
+      });
+    }
+    if (!address || !address.trim()) {
+      return res.status(400).json({ error: 'Address is required.' });
+    }
+
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      if (type === 'Billing') {
+        // Check for existing billing address
+        const [existingBilling] = await connection.query(
+          'SELECT id FROM user_addresses WHERE user_id = ? AND type = ?',
+          [userId, 'Billing']
+        );
+
+        if (existingBilling.length > 0) {
+          // Update existing billing address
+          await connection.query(
+            'UPDATE user_addresses SET address = ?, updated_at = NOW() WHERE id = ?',
+            [address.trim(), existingBilling[0].id]
+          );
+        } else {
+          // Insert new billing address
+          await connection.query(
+            'INSERT INTO user_addresses (user_id, type, address) VALUES (?, ?, ?)',
+            [userId, 'Billing', address.trim()]
+          );
+        }
+      } else {
+        // Check for duplicate shipping address (case-insensitive)
+        const [existingShipping] = await connection.query(
+          'SELECT id FROM user_addresses WHERE user_id = ? AND type = ? AND LOWER(address) = LOWER(?)',
+          [userId, 'Shipping', address.trim()]
+        );
+
+        if (existingShipping.length > 0) {
+          await connection.rollback();
+          connection.release();
+          return res.status(400).json({ error: 'Duplicate shipping address not allowed.' });
+        }
+
+        // Insert new shipping address
+        await connection.query(
+          'INSERT INTO user_addresses (user_id, type, address) VALUES (?, ?, ?)',
+          [userId, 'Shipping', address.trim()]
+        );
+      }
+
+      await connection.commit();
+      connection.release();
+
+      res.status(201).json({ message: 'Address saved successfully.' });
+    } catch (err) {
+      await connection.rollback();
+      connection.release();
+      console.error('Transaction error:', err);
+      res.status(500).json({ error: 'Failed to save address.' });
+    }
+  } catch (err) {
+    console.error('Server error:', err);
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+
+// GET /api/addresses - Retrieve all addresses for the user
+app.get("/api/addresses", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    const [addresses] = await pool.query(
+      "SELECT id, type, address, created_at, updated_at FROM user_addresses WHERE user_id = ? ORDER BY type ASC, created_at DESC",
+      [userId]
+    );
+
+    const formattedAddresses = addresses.map((addr) => ({
+      id: addr.id,
+      type: addr.type,
+      address: addr.address,
+      created_at: addr.created_at
+        ? new Date(addr.created_at).toISOString()
+        : null,
+      updated_at: addr.updated_at
+        ? new Date(addr.updated_at).toISOString()
+        : null,
+    }));
+
+    res.json(formattedAddresses);
+  } catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Failed to fetch addresses." });
+  }
+});
+
+// GET /api/addresses/:id - Retrieve a single address by ID
+app.get("/api/addresses/:id", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const [addresses] = await pool.query(
+      "SELECT id, type, address, created_at, updated_at FROM user_addresses WHERE id = ? AND user_id = ?",
+      [id, userId]
+    );
+
+    if (addresses.length === 0) {
+      return res
+        .status(404)
+        .json({ error: "Address not found or not authorized." });
+    }
+
+    const addr = addresses[0];
+    res.json({
+      id: addr.id,
+      type: addr.type,
+      address: addr.address,
+      created_at: addr.created_at
+        ? new Date(addr.created_at).toISOString()
+        : null,
+      updated_at: addr.updated_at
+        ? new Date(addr.updated_at).toISOString()
+        : null,
+    });
+  } catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Failed to fetch address." });
+  }
+});
+
+// PUT /api/addresses/:id - Update an existing address
+app.put("/api/addresses/:id", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { type, address } = req.body;
+  const userId = req.user.id;
+
+  try {
+    // Validate inputs
+    if (!["Billing", "Shipping"].includes(type)) {
+      return res.status(400).json({
+        error: 'Invalid address type. Must be "Billing" or "Shipping".',
+      });
+    }
+    if (!address || !address.trim()) {
+      return res.status(400).json({ error: "Address is required." });
+    }
+
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // Verify address exists and belongs to user
+      const [existing] = await connection.query(
+        "SELECT id, type FROM user_addresses WHERE id = ? AND user_id = ?",
+        [id, userId]
+      );
+
+      if (existing.length === 0) {
+        await connection.rollback();
+        connection.release();
+        return res
+          .status(404)
+          .json({ error: "Address not found or not authorized." });
+      }
+
+      // If changing to Billing, ensure no other billing address exists
+      if (type === "Billing") {
+        const [otherBilling] = await connection.query(
+          "SELECT id FROM user_addresses WHERE user_id = ? AND type = ? AND id != ?",
+          [userId, "Billing", id]
+        );
+        if (otherBilling.length > 0) {
+          await connection.rollback();
+          connection.release();
+          return res
+            .status(400)
+            .json({ error: "User already has a billing address." });
+        }
+      }
+
+      // Update address
+      await connection.query(
+        "UPDATE user_addresses SET type = ?, address = ?, updated_at = NOW() WHERE id = ?",
+        [type, address.trim(), id]
+      );
+
+      await connection.commit();
+      connection.release();
+
+      res.json({ message: "Address updated successfully." });
+    } catch (err) {
+      await connection.rollback();
+      connection.release();
+      console.error("Transaction error:", err);
+      res.status(500).json({ error: "Failed to update address." });
+    }
+  } catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Server error." });
+  }
+});
+
+// DELETE /api/addresses/:id - Delete an address
+app.delete("/api/addresses/:id", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const [result] = await pool.query(
+      "DELETE FROM user_addresses WHERE id = ? AND user_id = ?",
+      [id, userId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res
+        .status(404)
+        .json({ error: "Address not found or not authorized." });
+    }
+
+    res.json({ message: "Address deleted successfully." });
+  } catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Failed to delete address." });
+  }
+});
+
+
+// POST /api/contact
+app.post('/api/contact', authenticateToken, async (req, res) => {
+  const { name, email, subject, message } = req.body;
+  const userId = req.user.id; // Extracted from JWT
+
+  // Validate input
+  if (!name || !email || !subject || !message) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
+
+  let messageId;
+  try {
+    // Insert into database (MySQL-compatible)
+    const query = `
+      INSERT INTO contact_messages (user_id, name, email, subject, message, status)
+      VALUES (?, ?, ?, ?, ?, 'pending')
+    `;
+    const values = [userId || null, name, email, subject, message];
+    const [result] = await pool.query(query, values);
+    messageId = result.insertId; // Get the inserted ID
+
+    // Send email to admin
+    const mailOptions = {
+      from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+      to: 'aashish.shroff@zeta-v.com', // Admin email
+      subject: `New Contact Form Submission: ${subject}`,
+      html: `
+        <h3>New Contact Message</h3>
+        <p><strong>User ID:</strong> ${userId || 'Guest'}</p>
+        <p><strong>Name:</strong> ${name}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Subject:</strong> ${subject}</p>
+        <p><strong>Message:</strong> ${message}</p>
+        <p><strong>Message ID:</strong> ${messageId}</p>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    // Update status
+    await pool.query("UPDATE contact_messages SET status = 'processed' WHERE id = ?", [messageId]);
+
+    res.status(200).json({ message: 'Message sent successfully' });
+  } catch (error) {
+    console.error('Error processing contact form:', error);
+    if (messageId) {
+      await pool.query("UPDATE contact_messages SET status = 'failed' WHERE id = ?", [messageId]);
+    }
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+
+app.post('/api/forgot-password', async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email format' });
+
+  try {
+    const [users] = await pool.query('SELECT id, full_name FROM users WHERE email = ?', [email]);
+    if (users.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+
+    // Delete previous token
+    await pool.query('DELETE FROM password_resets WHERE email = ?', [email]);
+
+    // Insert new token
+    await pool.query('INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)', [email, resetToken, expiresAt]);
+
+    const data = { token: resetToken, email };
+    const encodedData = base64url.encode(JSON.stringify(data));
+    const resetLink = `https://studiosignaturecabinets.com/customer/reset-password?data=${encodedData}`;
+
+    const mailOptions = {
+      from: `"Studio Signature Cabinets" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Password Reset Request',
+      html: `
+        <h3>Password Reset Request</h3>
+        <p>Dear ${users[0].full_name || 'User'},</p>
+        <p>We received a request to reset your password. Click the link below to set a new password:</p>
+        <a href="${resetLink}" style="display:inline-block;padding:10px 20px;background-color:#007bff;color:#fff;text-decoration:none;border-radius:5px;">Reset Password</a>
+        <p>This link will expire in 1 hour. If you didn’t request this, please ignore this email.</p>
+        <p>Best regards,<br>Studio Signature Cabinets Team</p>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.status(200).json({ message: 'Password reset email sent successfully' });
+  } catch (error) {
+    console.error('Error processing forgot password:', error);
+    res.status(500).json({ error: 'Failed to send password reset email' });
+  }
+});
+
+// POST /api/reset-password
+
+
+app.post('/api/reset-password', async (req, res) => {
+  const { email, token, newPassword, confirmPassword } = req.body;
+
+  if (!email || !token || !newPassword || !confirmPassword) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({ error: 'New passwords do not match' });
+  }
+
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
+  if (!passwordRegex.test(newPassword) || /\s/.test(newPassword)) {
+    return res.status(400).json({
+      error: 'Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces',
+    });
+  }
+
+  try {
+    // Log inputs
+    console.log('Reset Password Payload:', { email, token });
+
+    const [resets] = await pool.query(
+      `SELECT * FROM password_resets WHERE email = ? AND token = ? AND expires_at > CONVERT_TZ(NOW(), 'SYSTEM', '+00:00')`,
+      [email, token]
+    );
+
+    if (resets.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    const [users] = await pool.query('SELECT id, full_name FROM users WHERE email = ?', [email]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = users[0];
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, user.id]);
+    await pool.query('DELETE FROM password_resets WHERE email = ? AND token = ?', [email, token]);
+
+    const mailOptions = {
+      from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+      to: email,
+      subject: 'Password Reset Confirmation',
+      html: `
+        <h3>Password Reset Confirmation</h3>
+        <p>Dear ${user.full_name || 'User'},</p>
+        <p>Your password has been successfully reset on ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })} IST.</p>
+        <p>If you did not perform this action, please contact our support team immediately at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+        <p>Best regards,<br>Studio Signature Cabinets Team</p>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({ message: 'Password reset successfully' });
+  } catch (error) {
+    console.error('Error resetting password:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+
+// Fetch visible media for customers
+app.get("/api/elearning", async (req, res) => {
+  try {
+    const [media] = await pool.query(
+      "SELECT id, media_type, file_path, description, created_at FROM elearning_media WHERE is_visible = 1"
+    );
+    // Return absolute URLs
+    const updatedMedia = media.map((item) => ({
+      ...item,
+      file_path: `${req.protocol}://${req.get("host")}${item.file_path}`,
+    }));
+    res.json({ media: updatedMedia });
+  } catch (err) {
+    console.error("Customer fetch error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+//-------------------------------------------Admin Apis ------------------------------------------------------------
+
+
+
 // Admin Registration API
 
 app.post("/api/admin/register", async (req, res) => {
@@ -2028,33 +2508,7 @@ app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
 
 // fetch all vendors
 
-// app.get("/api/admin/vendors", adminauthenticateToken, async (req, res) => {
-//   try {
-//     const [users] = await pool.query(
-//       "SELECT id, full_name, email, phone, created_at, last_login, account_status, is_active, company_name, address, admin_discount, updated_at FROM users WHERE user_type = 'vendor'"
-//     );
 
-//     res.json({
-//       users: users.map((user) => ({
-//         id: user.id,
-//         fullName: user.full_name,
-//         email: user.email,
-//         phone: user.phone,
-//         joinDate: user.created_at,
-//         lastLogin: user.last_login || null,
-//         account_status: user.account_status,
-//         is_active: user.is_active,
-//         company_name: user.company_name,
-//         address: user.address,
-//         admin_discount: user.admin_discount,
-//         updated_at: user.updated_at,
-//       })),
-//     });
-//   } catch (err) {
-//     console.error("Server error:", err);
-//     res.status(500).json({ error: "Server error" });
-//   }
-// });
 
 app.get("/api/admin/vendors", adminauthenticateToken, async (req, res) => {
   try {
@@ -2162,13 +2616,8 @@ app.put( "/api/admin/vendor/:id/status",
 );
 
 
-
-
-
 // Update Customer Discount
-app.put(
-  "/api/admin/user/:id/discount",
-  adminauthenticateToken,
+app.put("/api/admin/user/:id/discount",adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { admin_discount } = req.body;
@@ -2209,9 +2658,7 @@ app.put(
 
 // Update User Status
 
-app.put(
-  "/api/admin/user/:id/status",
-  adminauthenticateToken,
+app.put("/api/admin/user/:id/status",adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
@@ -2619,9 +3066,7 @@ app.post("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
 });
 
 // PUT /api/admin/orders/:id/shipping (fallback)
-app.put(
-  "/api/admin/orders/:id/shipping",
-  adminauthenticateToken,
+app.put("/api/admin/orders/:id/shipping", adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { shipping, additional_discount } = req.body;
@@ -2777,9 +3222,7 @@ app.put(
 
 
 
-app.put(
-  "/api/admin/orders/:id/status",
-  adminauthenticateToken,
+app.put("/api/admin/orders/:id/status",adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
@@ -2999,10 +3442,382 @@ app.put(
   }
 );
 
+
+
+// Schedule task to run every minute
+cron.schedule("* * * * *", async () => {
+  console.log("Running auto-accept orders task at", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }));
+
+  try {
+    // Query for Pending orders older than 24 hours (adjusted for IST)
+    const [pendingOrders] = await pool.query(
+      `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option, 
+              o.subtotal, o.tax, o.shipping, o.discount, o.additional_discount, o.total, o.status, 
+              u.full_name, u.email 
+       FROM orders o 
+       LEFT JOIN users u ON o.user_id = u.id 
+       WHERE o.status = 'Pending' 
+       AND o.created_at <= CONVERT_TZ(DATE_SUB(NOW(), INTERVAL 24 HOUR), '+00:00', '+05:30')`
+    );
+
+    if (pendingOrders.length === 0) {
+      console.log("No pending orders older than 24 hours found.");
+      return;
+    }
+
+    for (const order of pendingOrders) {
+      const user = {
+        full_name: order.full_name || "Customer",
+        email: order.email || "N/A",
+      };
+      const additionalDiscountPercent =
+        order.subtotal && order.additional_discount
+          ? ((order.additional_discount / order.subtotal) * 100).toFixed(2)
+          : "0.00";
+
+      // Update order status to Accepted
+      await pool.query("UPDATE orders SET status = 'Accepted' WHERE id = ?", [order.id]);
+      console.log(`Order ${order.order_id} auto-accepted after 24 hours.`);
+
+      // Send email if email is available
+      if (user.email !== "N/A") {
+        const mailOptions = {
+          from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+          to: user.email,
+          subject: `Your Order #${order.order_id} Has Been Accepted!`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h2>Hello, ${user.full_name}!</h2>
+              <p>Great news! Your order <strong>#${order.order_id}</strong> has been accepted and is now being processed.</p>
+              <h3>Order Details:</h3>
+              <ul style="list-style: none; padding: 0;">
+                <li><strong>Order ID:</strong> ${order.order_id}</li>
+                <li><strong>Door Style:</strong> ${order.door_style}</li>
+                <li><strong>Finish Type:</strong> ${order.finish_type}</li>
+                ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
+                ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
+                <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
+                <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
+                <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
+                <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
+                <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
+                <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
+              </ul>
+              <p><strong>Next Steps:</strong></p>
+              <ul>
+                <li>Your order is now in the processing stage. We’ll notify you with updates on its progress.</li>
+                <li>You can track your order status in your account at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
+              </ul>
+              <p>If you have any questions, please contact our support team at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+              <p>Thank you for choosing Studio Signature Cabinets!</p>
+              <p>Best regards,<br>Team Studio Signature Cabinets</p>
+            </div>
+          `,
+        };
+
+        try {
+          await transporter.sendMail(mailOptions);
+          console.log(`Email sent for order ${order.order_id} status: Accepted`);
+        } catch (emailErr) {
+          console.error(`Failed to send email for order ${order.order_id}:`, emailErr);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error in auto-accept orders task:", err);
+  }
+});
+
+
+
+
+
+
+
+// app.put("/api/admin/orders/:id/status", adminauthenticateToken, async (req, res) => {
+//   const { id } = req.params;
+//   const { status } = req.body;
+
+//   // Validate status
+//   if (!["Pending", "Accepted", "Processing", "Completed", "Cancelled"].includes(status)) {
+//     return res.status(400).json({
+//       error: "Invalid status. Must be Pending, Accepted, Processing, Completed, or Cancelled",
+//     });
+//   }
+
+//   try {
+//     // Check if order exists and fetch details
+//     const [orders] = await pool.query(
+//       `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option, 
+//               o.subtotal, o.tax, o.shipping, o.discount, o.additional_discount, o.total, o.status, 
+//               u.full_name, u.email 
+//        FROM orders o 
+//        LEFT JOIN users u ON o.user_id = u.id 
+//        WHERE o.id = ?`,
+//       [id]
+//     );
+//     if (orders.length === 0) {
+//       return res.status(404).json({ error: "Order not found" });
+//     }
+
+//     const order = orders[0];
+
+//     // Prevent status changes if order is Cancelled
+//     if (order.status === "Cancelled") {
+//       return res.status(400).json({
+//         error: "Cannot update status of a cancelled order",
+//       });
+//     }
+
+//     const user = {
+//       full_name: order.full_name || "Customer",
+//       email: order.email || "N/A",
+//     };
+//     const additionalDiscountPercent =
+//       order.subtotal && order.additional_discount
+//         ? ((order.additional_discount / order.subtotal) * 100).toFixed(2)
+//         : "0.00";
+
+//     // Update status
+//     await pool.query("UPDATE orders SET status = ? WHERE id = ?", [status, id]);
+
+//     // If status is Completed, check for pending orders older than 24 hours
+//     if (status === "Completed") {
+//       const [pendingOrders] = await pool.query(
+//         `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option, 
+//                 o.subtotal, o.tax, o.shipping, o.discount, o.additional_discount, o.total, o.status, 
+//                 u.full_name, u.email 
+//          FROM orders o 
+//          LEFT JOIN users u ON o.user_id = u.id 
+//          WHERE o.status = 'Pending' AND o.created_at < DATEADD(HOUR, -24, GETDATE())`
+//       );
+
+//       for (const pendingOrder of pendingOrders) {
+//         const pendingUser = {
+//           full_name: pendingOrder.full_name || "Customer",
+//           email: pendingOrder.email || "N/A",
+//         };
+//         const pendingAdditionalDiscountPercent =
+//           pendingOrder.subtotal && pendingOrder.additional_discount
+//             ? ((pendingOrder.additional_discount / pendingOrder.subtotal) * 100).toFixed(2)
+//             : "0.00";
+
+//         // Update pending order to Accepted
+//         await pool.query("UPDATE orders SET status = 'Accepted' WHERE id = ?", [pendingOrder.id]);
+
+//         // Send email for Accepted status if email is available
+//         if (pendingUser.email !== "N/A") {
+//           const mailOptions = {
+//             from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//             to: pendingUser.email,
+//             subject: `Your Order #${pendingOrder.order_id} Has Been Accepted!`,
+//             html: `
+//               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//                 <h2>Hello, ${pendingUser.full_name}!</h2>
+//                 <p>Great news! Your order <strong>#${pendingOrder.order_id}</strong> has been accepted and is now being processed.</p>
+//                 <h3>Order Details:</h3>
+//                 <ul style="list-style: none; padding: 0;">
+//                   <li><strong>Order ID:</strong> ${pendingOrder.order_id}</li>
+//                   <li><strong>Door Style:</strong> ${pendingOrder.door_style}</li>
+//                   <li><strong>Finish Type:</strong> ${pendingOrder.finish_type}</li>
+//                   ${pendingOrder.stain_option ? `<li><strong>Stain Option:</strong> ${pendingOrder.stain_option}</li>` : ""}
+//                   ${pendingOrder.paint_option ? `<li><strong>Paint Option:</strong> ${pendingOrder.paint_option}</li>` : ""}
+//                   <li><strong>Subtotal:</strong> $${parseFloat(pendingOrder.subtotal).toFixed(2)}</li>
+//                   <li><strong>Special Discount:</strong> $${parseFloat(pendingOrder.discount || 0).toFixed(2)}</li>
+//                   <li><strong>Additional Discount:</strong> ${pendingAdditionalDiscountPercent}% ($${parseFloat(pendingOrder.additional_discount || 0).toFixed(2)})</li>
+//                   <li><strong>Tax:</strong> $${parseFloat(pendingOrder.tax).toFixed(2)}</li>
+//                   <li><strong>Shipping:</strong> ${pendingOrder.shipping !== null ? `$${parseFloat(pendingOrder.shipping).toFixed(2)}` : "-"}</li>
+//                   <li><strong>Total:</strong> $${parseFloat(pendingOrder.total).toFixed(2)}</li>
+//                 </ul>
+//                 <p><strong>Next Steps:</strong></p>
+//                 <ul>
+//                   <li>Your order is now in the processing stage. We’ll notify you with updates on its progress.</li>
+//                   <li>You can track your order status in your account at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
+//                 </ul>
+//                 <p>If you have any questions, please contact our support team at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+//                 <p>Thank you for choosing Studio Signature Cabinets!</p>
+//                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//               </div>
+//             `,
+//           };
+
+//           try {
+//             await transporter.sendMail(mailOptions);
+//             console.log(`Email sent for order ${pendingOrder.order_id} status: Accepted`);
+//           } catch (emailErr) {
+//             console.error(`Failed to send email for Accepted status:`, emailErr);
+//           }
+//         }
+//       }
+//     }
+
+//     // Send email for Accepted, Processing, Completed, or Cancelled
+//     if (["Accepted", "Processing", "Completed", "Cancelled"].includes(status) && user.email !== "N/A") {
+//       let mailOptions;
+//       switch (status) {
+//         case "Accepted":
+//           mailOptions = {
+//             from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//             to: user.email,
+//             subject: `Your Order #${order.order_id} Has Been Accepted!`,
+//             html: `
+//               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//                 <h2>Hello, ${user.full_name}!</h2>
+//                 <p>Great news! Your order <strong>#${order.order_id}</strong> has been accepted and is now being processed.</p>
+//                 <h3>Order Details:</h3>
+//                 <ul style="list-style: none; padding: 0;">
+//                   <li><strong>Order ID:</strong> ${order.order_id}</li>
+//                   <li><strong>Door Style:</strong> ${order.door_style}</li>
+//                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
+//                   ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
+//                   ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
+//                   <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
+//                   <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
+//                   <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
+//                   <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
+//                   <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
+//                   <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
+//                 </ul>
+//                 <p><strong>Next Steps:</strong></p>
+//                 <ul>
+//                   <li>Your order is now in the processing stage. We’ll notify you with updates on its progress.</li>
+//                   <li>You can track your order status in your account at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
+//                 </ul>
+//                 <p>If you have any questions, please contact our support team at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+//                 <p>Thank you for choosing Studio Signature Cabinets!</p>
+//                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//               </div>
+//             `,
+//           };
+//           break;
+//         case "Processing":
+//           mailOptions = {
+//             from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//             to: user.email,
+//             subject: `Your Order #${order.order_id} is Being Processed!`,
+//             html: `
+//               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//                 <h2>Hello, ${user.full_name}!</h2>
+//                 <p>Your order <strong>#${order.order_id}</strong> is now being processed. We're preparing your items for shipment.</p>
+//                 <h3>Order Details:</h3>
+//                 <ul style="list-style: none; padding: 0;">
+//                   <li><strong>Order ID:</strong> ${order.order_id}</li>
+//                   <li><strong>Door Style:</strong> ${order.door_style}</li>
+//                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
+//                   ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
+//                   ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
+//                   <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
+//                   <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
+//                   <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
+//                   <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
+//                   <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
+//                   <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
+//                 </ul>
+//                 <p><strong>Next Steps:</strong></p>
+//                 <ul>
+//                   <li>We are preparing your order for shipment. You’ll receive a shipping confirmation soon.</li>
+//                   <li>Track your order status at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
+//                 </ul>
+//                 <p>For inquiries, contact us at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+//                 <p>Thank you for your patience!</p>
+//                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//               </div>
+//             `,
+//           };
+//           break;
+//         case "Completed":
+//           mailOptions = {
+//             from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//             to: user.email,
+//             subject: `Your Order #${order.order_id} Has Been Completed!`,
+//             html: `
+//               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//                 <h2>Hello, ${user.full_name}!</h2>
+//                 <p>Fantastic news! Your order <strong>#${order.order_id}</strong> has been completed and shipped.</p>
+//                 <h3>Order Details:</h3>
+//                 <ul style="list-style: none; padding: 0;">
+//                   <li><strong>Order ID:</strong> ${order.order_id}</li>
+//                   <li><strong>Door Style:</strong> ${order.door_style}</li>
+//                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
+//                   ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
+//                   ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
+//                   <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
+//                   <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
+//                   <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
+//                   <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
+//                   <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
+//                   <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
+//                 </ul>
+//                 <p><strong>Next Steps:</strong></p>
+//                 <ul>
+//                   <li>Your order has been shipped. Check your email for tracking information.</li>
+//                   <li>View your order history at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
+//                 </ul>
+//                 <p>If you have any issues, contact us at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+//                 <p>Enjoy your new cabinets!</p>
+//                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//               </div>
+//             `,
+//           };
+//           break;
+//         case "Cancelled":
+//           mailOptions = {
+//             from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//             to: user.email,
+//             subject: `Your Order #${order.order_id} Has Been Cancelled`,
+//             html: `
+//               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//                 <h2>Hello, ${user.full_name}!</h2>
+//                 <p>We’re sorry to inform you that your order <strong>#${order.order_id}</strong> has been cancelled.</p>
+//                 <p><strong>Note:</strong> This order cannot be reinstated or modified once cancelled.</p>
+//                 <h3>Order Details:</h3>
+//                 <ul style="list-style: none; padding: 0;">
+//                   <li><strong>Order ID:</strong> ${order.order_id}</li>
+//                   <li><strong>Door Style:</strong> ${order.door_style}</li>
+//                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
+//                   ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
+//                   ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
+//                   <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
+//                   <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
+//                   <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
+//                   <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
+//                   <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
+//                   <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
+//                 </ul>
+//                 <p><strong>Next Steps:</strong></p>
+//                 <ul>
+//                   <li>If this was unexpected, please contact us immediately at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</li>
+//                   <li>Explore our products to place a new order at <a href="https://studiosignaturecabinets.com">Studio Signature Cabinets</a>.</li>
+//                 </ul>
+//                 <p>We apologize for any inconvenience. Let us know how we can assist you further.</p>
+//                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//               </div>
+//             `,
+//           };
+//           break;
+//       }
+
+//       try {
+//         await transporter.sendMail(mailOptions);
+//         console.log(`Email sent for order ${order.order_id} status: ${status}`);
+//       } catch (emailErr) {
+//         console.error(`Failed to send email for ${status} status:`, emailErr);
+//       }
+//     }
+
+//     res.json({ message: "Order status updated successfully" });
+//   } catch (err) {
+//     console.error("Server error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+
 // Delete Order
-app.delete(
-  "/api/admin/orders/:id",
-  adminauthenticateToken,
+
+
+
+app.delete("/api/admin/orders/:id", adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
 
@@ -3026,301 +3841,6 @@ app.delete(
   }
 );
 
-// POST /api/addresses - Create a new billing or shipping address
-
-
-// POST /api/addresses
-app.post('/api/addresses', authenticateToken, async (req, res) => {
-  const { type, address } = req.body;
-  const userId = req.user.id;
-
-  try {
-    // Validate inputs
-    if (!['Billing', 'Shipping'].includes(type)) {
-      return res.status(400).json({
-        error: 'Invalid address type. Must be "Billing" or "Shipping".',
-      });
-    }
-    if (!address || !address.trim()) {
-      return res.status(400).json({ error: 'Address is required.' });
-    }
-
-    const connection = await pool.getConnection();
-    await connection.beginTransaction();
-
-    try {
-      if (type === 'Billing') {
-        // Check for existing billing address
-        const [existingBilling] = await connection.query(
-          'SELECT id FROM user_addresses WHERE user_id = ? AND type = ?',
-          [userId, 'Billing']
-        );
-
-        if (existingBilling.length > 0) {
-          // Update existing billing address
-          await connection.query(
-            'UPDATE user_addresses SET address = ?, updated_at = NOW() WHERE id = ?',
-            [address.trim(), existingBilling[0].id]
-          );
-        } else {
-          // Insert new billing address
-          await connection.query(
-            'INSERT INTO user_addresses (user_id, type, address) VALUES (?, ?, ?)',
-            [userId, 'Billing', address.trim()]
-          );
-        }
-      } else {
-        // Check for duplicate shipping address (case-insensitive)
-        const [existingShipping] = await connection.query(
-          'SELECT id FROM user_addresses WHERE user_id = ? AND type = ? AND LOWER(address) = LOWER(?)',
-          [userId, 'Shipping', address.trim()]
-        );
-
-        if (existingShipping.length > 0) {
-          await connection.rollback();
-          connection.release();
-          return res.status(400).json({ error: 'Duplicate shipping address not allowed.' });
-        }
-
-        // Insert new shipping address
-        await connection.query(
-          'INSERT INTO user_addresses (user_id, type, address) VALUES (?, ?, ?)',
-          [userId, 'Shipping', address.trim()]
-        );
-      }
-
-      await connection.commit();
-      connection.release();
-
-      res.status(201).json({ message: 'Address saved successfully.' });
-    } catch (err) {
-      await connection.rollback();
-      connection.release();
-      console.error('Transaction error:', err);
-      res.status(500).json({ error: 'Failed to save address.' });
-    }
-  } catch (err) {
-    console.error('Server error:', err);
-    res.status(500).json({ error: 'Server error.' });
-  }
-});
-
-
-// GET /api/addresses - Retrieve all addresses for the user
-app.get("/api/addresses", authenticateToken, async (req, res) => {
-  const userId = req.user.id;
-
-  try {
-    const [addresses] = await pool.query(
-      "SELECT id, type, address, created_at, updated_at FROM user_addresses WHERE user_id = ? ORDER BY type ASC, created_at DESC",
-      [userId]
-    );
-
-    const formattedAddresses = addresses.map((addr) => ({
-      id: addr.id,
-      type: addr.type,
-      address: addr.address,
-      created_at: addr.created_at
-        ? new Date(addr.created_at).toISOString()
-        : null,
-      updated_at: addr.updated_at
-        ? new Date(addr.updated_at).toISOString()
-        : null,
-    }));
-
-    res.json(formattedAddresses);
-  } catch (err) {
-    console.error("Server error:", err);
-    res.status(500).json({ error: "Failed to fetch addresses." });
-  }
-});
-
-// GET /api/addresses/:id - Retrieve a single address by ID
-app.get("/api/addresses/:id", authenticateToken, async (req, res) => {
-  const { id } = req.params;
-  const userId = req.user.id;
-
-  try {
-    const [addresses] = await pool.query(
-      "SELECT id, type, address, created_at, updated_at FROM user_addresses WHERE id = ? AND user_id = ?",
-      [id, userId]
-    );
-
-    if (addresses.length === 0) {
-      return res
-        .status(404)
-        .json({ error: "Address not found or not authorized." });
-    }
-
-    const addr = addresses[0];
-    res.json({
-      id: addr.id,
-      type: addr.type,
-      address: addr.address,
-      created_at: addr.created_at
-        ? new Date(addr.created_at).toISOString()
-        : null,
-      updated_at: addr.updated_at
-        ? new Date(addr.updated_at).toISOString()
-        : null,
-    });
-  } catch (err) {
-    console.error("Server error:", err);
-    res.status(500).json({ error: "Failed to fetch address." });
-  }
-});
-
-// PUT /api/addresses/:id - Update an existing address
-app.put("/api/addresses/:id", authenticateToken, async (req, res) => {
-  const { id } = req.params;
-  const { type, address } = req.body;
-  const userId = req.user.id;
-
-  try {
-    // Validate inputs
-    if (!["Billing", "Shipping"].includes(type)) {
-      return res.status(400).json({
-        error: 'Invalid address type. Must be "Billing" or "Shipping".',
-      });
-    }
-    if (!address || !address.trim()) {
-      return res.status(400).json({ error: "Address is required." });
-    }
-
-    const connection = await pool.getConnection();
-    await connection.beginTransaction();
-
-    try {
-      // Verify address exists and belongs to user
-      const [existing] = await connection.query(
-        "SELECT id, type FROM user_addresses WHERE id = ? AND user_id = ?",
-        [id, userId]
-      );
-
-      if (existing.length === 0) {
-        await connection.rollback();
-        connection.release();
-        return res
-          .status(404)
-          .json({ error: "Address not found or not authorized." });
-      }
-
-      // If changing to Billing, ensure no other billing address exists
-      if (type === "Billing") {
-        const [otherBilling] = await connection.query(
-          "SELECT id FROM user_addresses WHERE user_id = ? AND type = ? AND id != ?",
-          [userId, "Billing", id]
-        );
-        if (otherBilling.length > 0) {
-          await connection.rollback();
-          connection.release();
-          return res
-            .status(400)
-            .json({ error: "User already has a billing address." });
-        }
-      }
-
-      // Update address
-      await connection.query(
-        "UPDATE user_addresses SET type = ?, address = ?, updated_at = NOW() WHERE id = ?",
-        [type, address.trim(), id]
-      );
-
-      await connection.commit();
-      connection.release();
-
-      res.json({ message: "Address updated successfully." });
-    } catch (err) {
-      await connection.rollback();
-      connection.release();
-      console.error("Transaction error:", err);
-      res.status(500).json({ error: "Failed to update address." });
-    }
-  } catch (err) {
-    console.error("Server error:", err);
-    res.status(500).json({ error: "Server error." });
-  }
-});
-
-// DELETE /api/addresses/:id - Delete an address
-app.delete("/api/addresses/:id", authenticateToken, async (req, res) => {
-  const { id } = req.params;
-  const userId = req.user.id;
-
-  try {
-    const [result] = await pool.query(
-      "DELETE FROM user_addresses WHERE id = ? AND user_id = ?",
-      [id, userId]
-    );
-
-    if (result.affectedRows === 0) {
-      return res
-        .status(404)
-        .json({ error: "Address not found or not authorized." });
-    }
-
-    res.json({ message: "Address deleted successfully." });
-  } catch (err) {
-    console.error("Server error:", err);
-    res.status(500).json({ error: "Failed to delete address." });
-  }
-});
-
-
-// POST /api/contact
-app.post('/api/contact', authenticateToken, async (req, res) => {
-  const { name, email, subject, message } = req.body;
-  const userId = req.user.id; // Extracted from JWT
-
-  // Validate input
-  if (!name || !email || !subject || !message) {
-    return res.status(400).json({ error: 'All fields are required' });
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ error: 'Invalid email format' });
-  }
-
-  let messageId;
-  try {
-    // Insert into database (MySQL-compatible)
-    const query = `
-      INSERT INTO contact_messages (user_id, name, email, subject, message, status)
-      VALUES (?, ?, ?, ?, ?, 'pending')
-    `;
-    const values = [userId || null, name, email, subject, message];
-    const [result] = await pool.query(query, values);
-    messageId = result.insertId; // Get the inserted ID
-
-    // Send email to admin
-    const mailOptions = {
-      from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-      to: 'aashish.shroff@zeta-v.com', // Admin email
-      subject: `New Contact Form Submission: ${subject}`,
-      html: `
-        <h3>New Contact Message</h3>
-        <p><strong>User ID:</strong> ${userId || 'Guest'}</p>
-        <p><strong>Name:</strong> ${name}</p>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Subject:</strong> ${subject}</p>
-        <p><strong>Message:</strong> ${message}</p>
-        <p><strong>Message ID:</strong> ${messageId}</p>
-      `,
-    };
-
-    await transporter.sendMail(mailOptions);
-
-    // Update status
-    await pool.query("UPDATE contact_messages SET status = 'processed' WHERE id = ?", [messageId]);
-
-    res.status(200).json({ message: 'Message sent successfully' });
-  } catch (error) {
-    console.error('Error processing contact form:', error);
-    if (messageId) {
-      await pool.query("UPDATE contact_messages SET status = 'failed' WHERE id = ?", [messageId]);
-    }
-    res.status(500).json({ error: 'Failed to send message' });
-  }
-});
 
 
 // GET /api/contact/messages
@@ -3341,122 +3861,330 @@ app.get('/api/admin/contact/messages', adminauthenticateToken, async (req, res) 
 
 
 
-
-
-app.post('/api/forgot-password', async (req, res) => {
-  const { email } = req.body;
-
-  if (!email) return res.status(400).json({ error: 'Email is required' });
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email format' });
-
+// Upload media
+app.post("/api/admin/elearning/upload", adminauthenticateToken, upload.single("media"), async (req, res) => {
   try {
-    const [users] = await pool.query('SELECT id, full_name FROM users WHERE email = ?', [email]);
-    if (users.length === 0) return res.status(404).json({ error: 'User not found' });
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+    const { description, media_type } = req.body;
+    if (!["image", "video"].includes(media_type)) {
+      return res.status(400).json({ error: "Invalid media type" });
+    }
 
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
-
-    // Delete previous token
-    await pool.query('DELETE FROM password_resets WHERE email = ?', [email]);
-
-    // Insert new token
-    await pool.query('INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)', [email, resetToken, expiresAt]);
-
-    const data = { token: resetToken, email };
-    const encodedData = base64url.encode(JSON.stringify(data));
-    const resetLink = `https://studiosignaturecabinets.com/customer/reset-password?data=${encodedData}`;
-
-    const mailOptions = {
-      from: `"Studio Signature Cabinets" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: 'Password Reset Request',
-      html: `
-        <h3>Password Reset Request</h3>
-        <p>Dear ${users[0].full_name || 'User'},</p>
-        <p>We received a request to reset your password. Click the link below to set a new password:</p>
-        <a href="${resetLink}" style="display:inline-block;padding:10px 20px;background-color:#007bff;color:#fff;text-decoration:none;border-radius:5px;">Reset Password</a>
-        <p>This link will expire in 1 hour. If you didn’t request this, please ignore this email.</p>
-        <p>Best regards,<br>Studio Signature Cabinets Team</p>
-      `,
-    };
-
-    await transporter.sendMail(mailOptions);
-
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.status(200).json({ message: 'Password reset email sent successfully' });
-  } catch (error) {
-    console.error('Error processing forgot password:', error);
-    res.status(500).json({ error: 'Failed to send password reset email' });
-  }
-});
-
-// POST /api/reset-password
-
-
-
-app.post('/api/reset-password', async (req, res) => {
-  const { email, token, newPassword, confirmPassword } = req.body;
-
-  if (!email || !token || !newPassword || !confirmPassword) {
-    return res.status(400).json({ error: 'All fields are required' });
-  }
-
-  if (newPassword !== confirmPassword) {
-    return res.status(400).json({ error: 'New passwords do not match' });
-  }
-
-  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
-  if (!passwordRegex.test(newPassword) || /\s/.test(newPassword)) {
-    return res.status(400).json({
-      error: 'Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces',
-    });
-  }
-
-  try {
-    // Log inputs
-    console.log('Reset Password Payload:', { email, token });
-
-    const [resets] = await pool.query(
-      `SELECT * FROM password_resets WHERE email = ? AND token = ? AND expires_at > CONVERT_TZ(NOW(), 'SYSTEM', '+00:00')`,
-      [email, token]
+    const filePath = `/uploads/${req.file.filename}`;
+    const [result] = await pool.query(
+      "INSERT INTO elearning_media (media_type, file_path, description, is_visible) VALUES (?, ?, ?, 1)",
+      [media_type, filePath, description || null]
     );
 
-    if (resets.length === 0) {
-      return res.status(400).json({ error: 'Invalid or expired reset token' });
-    }
-
-    const [users] = await pool.query('SELECT id, full_name FROM users WHERE email = ?', [email]);
-    if (users.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    const user = users[0];
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, user.id]);
-    await pool.query('DELETE FROM password_resets WHERE email = ? AND token = ?', [email, token]);
-
-    const mailOptions = {
-      from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-      to: email,
-      subject: 'Password Reset Confirmation',
-      html: `
-        <h3>Password Reset Confirmation</h3>
-        <p>Dear ${user.full_name || 'User'},</p>
-        <p>Your password has been successfully reset on ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })} IST.</p>
-        <p>If you did not perform this action, please contact our support team immediately at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
-        <p>Best regards,<br>Studio Signature Cabinets Team</p>
-      `,
-    };
-
-    await transporter.sendMail(mailOptions);
-
-    res.status(200).json({ message: 'Password reset successfully' });
-  } catch (error) {
-    console.error('Error resetting password:', error);
-    res.status(500).json({ error: 'Failed to reset password' });
+    res.json({
+      media: {
+        id: result.insertId,
+        media_type,
+        file_path: `${req.protocol}://${req.get("host")}${filePath}`,
+        description: description || null,
+        is_visible: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error("Upload error:", err);
+    res.status(500).json({ error: err.message || "Server error" });
   }
 });
+
+// Fetch all media for admin
+app.get("/api/admin/elearning", adminauthenticateToken, async (req, res) => {
+  try {
+    const [media] = await pool.query(
+      "SELECT id, media_type, file_path, description, is_visible, created_at, updated_at FROM elearning_media"
+    );
+    // Return absolute URLs
+    const updatedMedia = media.map((item) => ({
+      ...item,
+      file_path: `${req.protocol}://${req.get("host")}${item.file_path}`,
+    }));
+    res.json({ media: updatedMedia });
+  } catch (err) {
+    console.error("Fetch error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Toggle visibility
+app.put("/api/admin/elearning/:id/toggle", adminauthenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { is_visible } = req.body;
+
+  if (![0, 1].includes(Number(is_visible))) {
+    return res.status(400).json({ error: "Invalid visibility value" });
+  }
+
+  try {
+    const [result] = await pool.query(
+      "UPDATE elearning_media SET is_visible = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [is_visible, id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Media not found" });
+    }
+    res.json({ message: "Visibility updated successfully" });
+  } catch (err) {
+    console.error("Toggle error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+
+// Delete media
+app.delete("/api/admin/elearning/:id", adminauthenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Fetch file_path to delete the file
+    const [rows] = await pool.query("SELECT file_path FROM elearning_media WHERE id = ?", [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Media not found" });
+    }
+
+    const filePath = path.join(__dirname, "../../public_html", rows[0].file_path);
+    try {
+      await fs.unlink(filePath); // Delete file from server
+    } catch (err) {
+      console.warn(`Failed to delete file ${filePath}:`, err.message);
+      // Continue with database deletion even if file deletion fails
+    }
+
+    const [result] = await pool.query("DELETE FROM elearning_media WHERE id = ?", [id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Media not found" });
+    }
+
+    res.json({ message: "Media deleted successfully" });
+  } catch (err) {
+    console.error("Delete error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Validation functions
+const validateEmail = (email) => {
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(email) && !/\s/.test(email);
+};
+
+const validatePassword = (password) => {
+  const re = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+  return re.test(password) && !/\s/.test(password);
+};
+
+const validatePhone = (phone) => {
+  const re = /^\d{10}$/;
+  return re.test(phone);
+};
+
+
+
+
+// Fetch all admins
+app.get("/api/adminuserpanel/admins", adminauthenticateToken, async (req, res) => {
+  try {
+    const [adminUsers] = await pool.query(
+      "SELECT id, full_name AS fullName, email, role AS userType, created_at, updated_at FROM admins"
+    );
+    console.log("Fetched admins:", adminUsers); // Debug log
+    res.json({ admins: adminUsers });
+  } catch (err) {
+    console.error("Fetch admins error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Fetch all users (customers/vendors)
+app.get("/api/adminuserpanel/users", adminauthenticateToken, async (req, res) => {
+  try {
+    const [customerVendorUsers] = await pool.query(
+      "SELECT id, full_name AS fullName, email, user_type AS userType, created_at, updated_at FROM users "
+    );
+    console.log("Fetched users:", customerVendorUsers); // Debug log
+    res.json({ users: customerVendorUsers });
+  } catch (err) {
+    console.error("Fetch users error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+
+
+// Admin registration
+app.post("/api/adminuserpanel/register", adminauthenticateToken, async (req, res) => {
+  const { fullName, email, password, confirmPassword, phone, bio } = req.body;
+
+  // Validate input
+  if (!fullName || !email || !password || !confirmPassword) {
+    return res.status(400).json({ error: "All required fields must be provided" });
+  }
+  if (!validateEmail(email)) {
+    return res.status(400).json({ error: "Invalid email address" });
+  }
+  if (!validatePassword(password)) {
+    return res.status(400).json({ error: "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character" });
+  }
+  if (password !== confirmPassword) {
+    return res.status(400).json({ error: "Passwords do not match" });
+  }
+  if (phone && !validatePhone(phone)) {
+    return res.status(400).json({ error: "Phone number must be exactly 10 digits" });
+  }
+
+  try {
+    // Check if email exists in admins or users table
+    const [adminEmail] = await pool.query("SELECT id FROM admins WHERE email = ?", [email]);
+    const [userEmail] = await pool.query("SELECT id FROM users WHERE email = ?", [email]);
+    if (adminEmail.length > 0 || userEmail.length > 0) {
+      return res.status(400).json({ error: "Email already exists" });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Insert admin
+    const [result] = await pool.query(
+      "INSERT INTO admins (full_name, email, password, role, phone, bio, is_active) VALUES (?, ?, ?, 'Administrator', ?, ?, 1)",
+      [fullName, email, hashedPassword, phone || null, bio || null]
+    );
+
+    res.json({
+      user: {
+        id: result.insertId,
+        fullName,
+        email,
+        userType: "Administrator",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      message: "Admin registered successfully",
+    });
+  } catch (err) {
+    console.error("Admin register error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Customer/Vendor signup
+app.post("/api/adminuserpanel/signup", adminauthenticateToken, async (req, res) => {
+  const { userType, fullName, email, password, confirmPassword, companyName, taxId, phone, address, agreeTerms } = req.body;
+
+  // Validate input
+  if (!userType || !fullName || !email || !password || !confirmPassword || 
+      (userType === "vendor" && (!companyName || !taxId || !phone || !address))) {
+    return res.status(400).json({ error: "All required fields must be provided" });
+  }
+  if (!["customer", "vendor"].includes(userType)) {
+    return res.status(400).json({ error: "Invalid user type" });
+  }
+  if (!validateEmail(email)) {
+    return res.status(400).json({ error: "Invalid email address" });
+  }
+  if (!validatePassword(password)) {
+    return res.status(400).json({ error: "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character" });
+  }
+  if (password !== confirmPassword) {
+    return res.status(400).json({ error: "Passwords do not match" });
+  }
+  if (phone && !validatePhone(phone)) {
+    return res.status(400).json({ error: "Phone number must be exactly 10 digits" });
+  }
+
+  try {
+    // Check if email exists in users or admin table
+    const [userEmail] = await pool.query("SELECT id FROM users WHERE email = ?", [email]);
+   
+
+    if (userEmail.length > 0 ) {
+      return res.status(400).json({ error: "Email already exists" });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Insert user
+    const [result] = await pool.query(
+      `INSERT INTO users 
+      (user_type, full_name, email, password, company_name, tax_id, phone, address, account_status, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Active', 1, NOW(), NOW())`,
+      [userType, fullName, email, hashedPassword, companyName || null, taxId || null, phone || null, address || null]
+    );
+
+    res.json({
+      user: {
+        id: result.insertId,
+        fullName,
+        email,
+        userType,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      message: `${userType.charAt(0).toUpperCase() + userType.slice(1)} registered successfully`,
+    });
+  } catch (err) {
+    console.error("Signup error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+// Delete a user from users table
+app.delete("/api/adminuserpanel/users/:id", adminauthenticateToken, async (req, res) => {
+  const { id } = req.params;
+  console.log(`Attempting to delete user ID ${id} from users table`); // Debug log
+
+  try {
+    const [result] = await pool.query("DELETE FROM users WHERE id = ?", [id]);
+    console.log(`Delete user result:`, result); // Debug log
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    res.json({ message: "User deleted successfully" });
+  } catch (err) {
+    console.error("Delete user error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Delete an admin from admin table
+app.delete("/api/adminuserpanel/admins/:id", adminauthenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const adminId = req.admin.id; // From decoded token
+  console.log(`Attempting to delete admin ID ${id} by admin ID ${adminId}`); // Debug log
+
+  try {
+    // Prevent self-deletion
+    if (parseInt(id) === adminId) {
+      return res.status(403).json({ error: "Cannot delete your own account" });
+    }
+
+    const [result] = await pool.query("DELETE FROM admins WHERE id = ?", [id]);
+    console.log(`Delete admin result:`, result); // Debug log
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Admin not found" });
+    }
+    res.json({ message: "Admin deleted successfully" });
+  } catch (err) {
+    console.error("Delete admin error:", err);
+    res.status(500).json({ error: err.message || "Server error" });
+  }
+});
+
+
+
+
+
+
 
 
 //-----------------------------------------------------------------------VEndor API Endpoints-----------------------------------------------------------------------

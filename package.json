@@ -3,8 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-  
-  "test": "echo \"No tests yet\"",
+    "test": "echo \"No tests yet\"",
     "start": "node index.js"
   },
   "keywords": [],
@@ -21,7 +20,9 @@
     "express-mysql-session": "^3.0.3",
     "express-session": "^1.18.1",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.1",
     "mysql2": "^3.14.1",
+    "node-cron": "^4.1.0",
     "nodemailer": "^7.0.3",
     "uuid": "^11.1.0",
     "xlsx": "^0.18.5"
