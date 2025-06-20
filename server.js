@@ -27,7 +27,7 @@ app.post('/api/import-items', async (req, res) => {
     });
 
     // Read Excel file (Items 2.xlsx, single sheet)
-    const filePath = 'Items 2.xlsx';
+    const filePath = 'SSC MASTER LIST.xlsx';
     const workbook = XLSX.readFile(filePath);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(sheet);
@@ -51,8 +51,9 @@ app.post('/api/import-items', async (req, res) => {
       }, {});
 
       // Map Excel columns to table fields
-      const sku = itemKeys['no.'] ? String(itemKeys['no.']).trim() : null;
+      const sku = itemKeys['no'] ? String(itemKeys['no']).trim() : null;
       const description = itemKeys['description'] ? String(itemKeys['description']).trim() : null;
+      const color = itemKeys['color'] ? String(itemKeys['color']).trim() : null;
       const item_type = itemKeys['description 2'] ? String(itemKeys['description 2']).trim() : 'STAINED PLYWOOD';
       const search_description = itemKeys['search description'] ? String(itemKeys['search description']).trim() : null;
       const unit_of_measure = itemKeys['base unit of measure'] ? String(itemKeys['base unit of measure']).trim() : 'NOS';
@@ -74,9 +75,9 @@ app.post('/api/import-items', async (req, res) => {
       // Insert into items table
       await connection.query(
         `INSERT INTO items (
-          sku, description, item_type, search_description, unit_of_measure, price,
+          sku, description, item_type, search_description, unit_of_measure, price,color,
           weight, cube, cw, gr, se, sw
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)`,
         [
           sku,
           description,
@@ -84,6 +85,7 @@ app.post('/api/import-items', async (req, res) => {
           search_description,
           unit_of_measure,
           price,
+          color,
           null, // weight
           null, // cube
           null, // cw

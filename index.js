@@ -1527,9 +1527,39 @@ app.put("/api/orders/:id/cancel", authenticateToken, async (req, res) => {
 });
 
 
+// app.get("/api/items", authenticateToken, async (req, res) => {
+//   try {
+//     const { item_type, value, sku_prefix,sku } = req.query;
+//     let query = "SELECT * FROM items WHERE 1=1";
+//     const params = [];
+
+//     if (item_type) {
+//       query += " AND item_type = ?";
+//       params.push(item_type.toUpperCase());
+//     }
+
+//     if (sku) {
+//       query += " AND sku = ?";
+//       params.push(sku);
+//     }
+
+//     if (sku_prefix) {
+//       query += " AND sku LIKE ?";
+//       params.push(`${sku_prefix}%`);
+//     }
+
+//     const [rows] = await pool.query(query, params);
+//     res.json(rows);
+//   } catch (err) {
+//     console.error("Error fetching items:", err);
+//     res.status(500).json({ error: "Failed to fetch items", details: err.message });
+//   }
+// });
+
+
 app.get("/api/items", authenticateToken, async (req, res) => {
   try {
-    const { item_type, value, sku_prefix,sku } = req.query;
+    const { item_type, color, sku_prefix, sku } = req.query;
     let query = "SELECT * FROM items WHERE 1=1";
     const params = [];
 
@@ -1538,9 +1568,9 @@ app.get("/api/items", authenticateToken, async (req, res) => {
       params.push(item_type.toUpperCase());
     }
 
-    if (sku) {
-      query += " AND sku = ?";
-      params.push(sku);
+    if (color) {
+      query += " AND color = ?";
+      params.push(color);
     }
 
     if (sku_prefix) {
@@ -1548,14 +1578,18 @@ app.get("/api/items", authenticateToken, async (req, res) => {
       params.push(`${sku_prefix}%`);
     }
 
+    if (sku) {
+      query += " AND sku = ?";
+      params.push(sku);
+    }
+
     const [rows] = await pool.query(query, params);
     res.json(rows);
   } catch (err) {
     console.error("Error fetching items:", err);
-    res.status(500).json({ error: "Failed to fetch items", details: err.message });
+    res.status(500).json({ error: "Failed to fetch items" });
   }
 });
-
 
 app.get("/api/user-stats", authenticateToken, async (req, res) => {
   try {
