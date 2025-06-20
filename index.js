@@ -4,8 +4,8 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const nodemailer = require("nodemailer");
-const crypto = require('crypto');
-const base64url = require('base64url');
+const crypto = require("crypto");
+const base64url = require("base64url");
 const cron = require("node-cron");
 const path = require("path");
 const fs = require("fs").promises;
@@ -71,8 +71,10 @@ const transporter = nodemailer.createTransport({
 });
 
 // Serve uploads directory statically from public_html/uploads
-app.use("/uploads", express.static(path.join(__dirname, "../../public_html/uploads")));
-
+app.use(
+  "/uploads",
+  express.static(path.join(__dirname, "../../public_html/uploads"))
+);
 
 // Multer storage configuration
 const storage = multer.diskStorage({
@@ -88,7 +90,10 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${Date.now()}-${Math.random().toString(36).substring(2, 9)}${ext}`);
+    cb(
+      null,
+      `${Date.now()}-${Math.random().toString(36).substring(2, 9)}${ext}`
+    );
   },
 });
 
@@ -97,16 +102,16 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const filetypes = /jpeg|jpg|png|mp4/;
     const mimetype = filetypes.test(file.mimetype);
-    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+    const extname = filetypes.test(
+      path.extname(file.originalname).toLowerCase()
+    );
     if (mimetype && extname) return cb(null, true);
     cb(new Error("Invalid file type. Only JPEG, PNG, and MP4 allowed."));
   },
   limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
 });
 
-
-//---------------------------------Customer ApI---------------------------------  
-
+//---------------------------------Customer ApI---------------------------------
 
 //Signup API
 
@@ -145,12 +150,24 @@ app.post("/api/signup", async (req, res) => {
 
   try {
     // Check if email already exists
+    // const [existingUsers] = await pool.query(
+    //   "SELECT id FROM users WHERE email = ?",
+    //   [email]
+    // );
+    // if (existingUsers.length > 0) {
+    //   return res.status(400).json({ error: "Email already exists" });
+    // }
+    // Check if email already exists for same userType
     const [existingUsers] = await pool.query(
-      "SELECT id FROM users WHERE email = ?",
-      [email]
+      "SELECT id FROM users WHERE email = ? AND user_type = ?",
+      [email, userType]
     );
     if (existingUsers.length > 0) {
-      return res.status(400).json({ error: "Email already exists" });
+      return res
+        .status(400)
+        .json({
+          error: `An account with this email already exists as a ${userType}`,
+        });
     }
 
     // Hash password
@@ -284,46 +301,49 @@ app.post("/api/signup", async (req, res) => {
 
 // Login API
 
-
-app.post('/api/login', async (req, res) => {
+app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+    const [users] = await pool.query("SELECT * FROM users WHERE email = ?", [
+      email,
+    ]);
 
     if (users.length === 0) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: "Invalid email or password" });
     }
 
     const user = users[0];
 
     // Check if user is active
     if (!user.is_active) {
-      return res.status(403).json({ error: 'Account is inactive' });
+      return res.status(403).json({ error: "Account is inactive" });
     }
-    if (!user.account_status || user.account_status !== 'Active') {
-      return res.status(403).json({ error: 'Account is inactive' });
+    if (!user.account_status || user.account_status !== "Active") {
+      return res.status(403).json({ error: "Account is inactive" });
     }
 
     // Check if user is a customer
-    if (user.user_type !== 'customer') {
-      return res.status(403).json({ error: 'Only customers can log in' });
+    if (user.user_type !== "customer") {
+      return res.status(403).json({ error: "Only customers can log in" });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: "Invalid email or password" });
     }
 
     // Update last login
-    await pool.query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
+    await pool.query("UPDATE users SET last_login = NOW() WHERE id = ?", [
+      user.id,
+    ]);
 
     // Create JWT with token_version
     const token = jwt.sign(
       { id: user.id, email: user.email, token_version: user.token_version },
       JWT_SECRET,
-      { expiresIn: '1d' }
+      { expiresIn: "1d" }
     );
 
     res.json({
@@ -336,76 +356,88 @@ app.post('/api/login', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error("Login error:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-
 // POST /api/customer/logout
-app.post('/api/customer/logout', authenticateToken, async (req, res) => {
- const userId = req.user.id;
- 
- try {
- // Verify user is a customer
- const [users] = await pool.query('SELECT user_type, token_version FROM users WHERE id = ?', [userId]);
- if (users.length === 0 || users[0].user_type !== 'customer') {
- console.log(`Logout attempt failed: User ID ${userId} is not a vendor`);
- return res.status(403).json({ error: 'Only vendors can log out from this endpoint' });
- }
- 
- // Increment token_version to invalidate existing tokens
- await pool.query('UPDATE users SET token_version = token_version + 1 WHERE id = ?', [userId]);
- console.log(`User ID ${userId} logged out, token_version incremented`);
- 
- // Add cache-control headers
- res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
- res.status(200).json({ message: 'Logged out successfully' });
- } catch (err) {
- console.error('Logout error:', err);
- res.status(500).json({ error: 'Server error' });
- }
+app.post("/api/customer/logout", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    // Verify user is a customer
+    const [users] = await pool.query(
+      "SELECT user_type, token_version FROM users WHERE id = ?",
+      [userId]
+    );
+    if (users.length === 0 || users[0].user_type !== "customer") {
+      console.log(`Logout attempt failed: User ID ${userId} is not a vendor`);
+      return res
+        .status(403)
+        .json({ error: "Only vendors can log out from this endpoint" });
+    }
+
+    // Increment token_version to invalidate existing tokens
+    await pool.query(
+      "UPDATE users SET token_version = token_version + 1 WHERE id = ?",
+      [userId]
+    );
+    console.log(`User ID ${userId} logged out, token_version incremented`);
+
+    // Add cache-control headers
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.status(200).json({ message: "Logged out successfully" });
+  } catch (err) {
+    console.error("Logout error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
-
 // customer Token Verification API
-app.get('/api/customer/verify', authenticateToken, async (req, res) => {
- const userId = req.user.id;
- const tokenVersion = req.user.token_version;
- 
- try {
- const [users] = await pool.query('SELECT token_version, user_type FROM users WHERE id = ?', [userId]);
- if (users.length === 0 || users[0].user_type !== 'customer') {
- return res.status(403).json({ error: 'Invalid user' });
- }
- if (users[0].token_version !== tokenVersion) {
- return res.status(401).json({ error: 'Token is invalid' });
- }
- res.status(200).json({ valid: true });
- } catch (err) {
- console.error('Token verification error:', err);
- res.status(500).json({ error: 'Server error' });
- }
+app.get("/api/customer/verify", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+  const tokenVersion = req.user.token_version;
+
+  try {
+    const [users] = await pool.query(
+      "SELECT token_version, user_type FROM users WHERE id = ?",
+      [userId]
+    );
+    if (users.length === 0 || users[0].user_type !== "customer") {
+      return res.status(403).json({ error: "Invalid user" });
+    }
+    if (users[0].token_version !== tokenVersion) {
+      return res.status(401).json({ error: "Token is invalid" });
+    }
+    res.status(200).json({ valid: true });
+  } catch (err) {
+    console.error("Token verification error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
 // POST /api/logout
-app.post('/api/logout', authenticateToken, async (req, res) => {
+app.post("/api/logout", authenticateToken, async (req, res) => {
   const userId = req.user.id;
 
   try {
     // Increment token_version to invalidate existing tokens
-    await pool.query('UPDATE users SET token_version = token_version + 1 WHERE id = ?', [userId]);
+    await pool.query(
+      "UPDATE users SET token_version = token_version + 1 WHERE id = ?",
+      [userId]
+    );
 
     // Add cache-control headers
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.status(200).json({ message: 'Logged out successfully' });
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.status(200).json({ message: "Logged out successfully" });
   } catch (err) {
-    console.error('Logout error:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error("Logout error:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-app.get('/api/verify-token', authenticateToken, async (req, res) => {
+app.get("/api/verify-token", authenticateToken, async (req, res) => {
   res.json({ user: { id: req.user.id, email: req.user.email } });
 });
 
@@ -490,18 +522,20 @@ app.put("/api/profile", authenticateToken, async (req, res) => {
 // Change Password API
 
 // PUT /api/password
-app.put('/api/password', authenticateToken, async (req, res) => {
+app.put("/api/password", authenticateToken, async (req, res) => {
   const { currentPassword, newPassword, confirmPassword } = req.body;
   const userId = req.user.id;
 
   try {
     // Validate input
     if (!currentPassword || !newPassword || !confirmPassword) {
-      return res.status(400).json({ error: 'All password fields are required' });
+      return res
+        .status(400)
+        .json({ error: "All password fields are required" });
     }
 
     if (newPassword !== confirmPassword) {
-      return res.status(400).json({ error: 'New passwords do not match' });
+      return res.status(400).json({ error: "New passwords do not match" });
     }
 
     // Password validation regex
@@ -510,16 +544,17 @@ app.put('/api/password', authenticateToken, async (req, res) => {
     if (!passwordRegex.test(newPassword) || /\s/.test(newPassword)) {
       return res.status(400).json({
         error:
-          'Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces',
+          "Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces",
       });
     }
 
     // Fetch current user
-    const [users] = await pool.query('SELECT password, email, full_name FROM users WHERE id = ?', [
-      userId,
-    ]);
+    const [users] = await pool.query(
+      "SELECT password, email, full_name FROM users WHERE id = ?",
+      [userId]
+    );
     if (users.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     const user = users[0];
@@ -527,26 +562,32 @@ app.put('/api/password', authenticateToken, async (req, res) => {
     // Verify current password
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Current password is incorrect' });
+      return res.status(401).json({ error: "Current password is incorrect" });
     }
 
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     // Update password
-    await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, userId]);
+    await pool.query("UPDATE users SET password = ? WHERE id = ?", [
+      hashedPassword,
+      userId,
+    ]);
 
     // Send confirmation email
     const mailOptions = {
       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
       to: user.email,
-      subject: 'Password Change Confirmation',
+      subject: "Password Change Confirmation",
       html: `
         <h3>Password Change Confirmation</h3>
-        <p>Dear ${user.full_name || 'User'},</p>
-        <p>Your password was successfully changed on ${new Date().toLocaleString('en-US', {
-          timeZone: 'Asia/Kolkata',
-        })} IST.</p>
+        <p>Dear ${user.full_name || "User"},</p>
+        <p>Your password was successfully changed on ${new Date().toLocaleString(
+          "en-US",
+          {
+            timeZone: "Asia/Kolkata",
+          }
+        )} IST.</p>
         <p>If you did not perform this action, please contact our support team immediately at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
         <p>Best regards,<br>Studio Signature Cabinets Team</p>
       `,
@@ -554,10 +595,10 @@ app.put('/api/password', authenticateToken, async (req, res) => {
 
     await transporter.sendMail(mailOptions);
 
-    res.json({ message: 'Password updated successfully' });
+    res.json({ message: "Password updated successfully" });
   } catch (err) {
-    console.error('Error updating password:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error("Error updating password:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
@@ -583,7 +624,7 @@ async function generateOrderId(pool) {
       }
     }
 
-    newOrderId = `S-ORD${String(newOrderNumber).padStart(6, '0')}`;
+    newOrderId = `S-ORD${String(newOrderNumber).padStart(6, "0")}`;
 
     // Double-check ID does not already exist
     const [existingOrder] = await pool.query(
@@ -592,16 +633,15 @@ async function generateOrderId(pool) {
     );
     if (existingOrder.length > 0) {
       newOrderNumber++;
-      newOrderId = `S-ORD${String(newOrderNumber).padStart(6, '0')}`;
+      newOrderId = `S-ORD${String(newOrderNumber).padStart(6, "0")}`;
     }
 
     return newOrderId;
   } catch (err) {
     console.error("Error generating order ID:", err);
-    return `S-ORD${String(101002).padStart(6, '0')}`;
+    return `S-ORD${String(101002).padStart(6, "0")}`;
   }
 }
-
 
 app.get("/api/orders/next-id", async (req, res) => {
   try {
@@ -612,7 +652,6 @@ app.get("/api/orders/next-id", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch next order ID" });
   }
 });
-
 
 app.post("/api/orders", authenticateToken, async (req, res) => {
   const {
@@ -633,10 +672,14 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
   try {
     // Validations (same as your original)
     if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: "Items are required and must be a non-empty array" });
+      return res
+        .status(400)
+        .json({ error: "Items are required and must be a non-empty array" });
     }
     if (!subtotal || !tax || !total) {
-      return res.status(400).json({ error: "Subtotal, tax, and total are required" });
+      return res
+        .status(400)
+        .json({ error: "Subtotal, tax, and total are required" });
     }
     if (!doorStyle || !finishType || !account || !billTo) {
       return res.status(400).json({
@@ -644,10 +687,14 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
       });
     }
     if (finishType === "Stain" && !stainOption) {
-      return res.status(400).json({ error: "Stain option is required for stain finish" });
+      return res
+        .status(400)
+        .json({ error: "Stain option is required for stain finish" });
     }
     if (finishType === "Paint" && !paintOption) {
-      return res.status(400).json({ error: "Paint option is required for paint finish" });
+      return res
+        .status(400)
+        .json({ error: "Paint option is required for paint finish" });
     }
 
     const userId = req.user.id;
@@ -706,18 +753,20 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
       const autoId = orderResult.insertId;
 
       // Generate order_id
-      const orderId = `S-ORD${String(autoId + 101001).padStart(6, '0')}`;
+      const orderId = `S-ORD${String(autoId + 101001).padStart(6, "0")}`;
 
       // Update order_id
-      await connection.query(
-        `UPDATE orders SET order_id = ? WHERE id = ?`,
-        [orderId, autoId]
-      );
+      await connection.query(`UPDATE orders SET order_id = ? WHERE id = ?`, [
+        orderId,
+        autoId,
+      ]);
 
       // Insert order items
       for (const item of items) {
         if (!item.sku || !item.name || !item.quantity || item.quantity < 1) {
-          throw new Error("Invalid item data: SKU, name, and valid quantity are required");
+          throw new Error(
+            "Invalid item data: SKU, name, and valid quantity are required"
+          );
         }
 
         await connection.query(
@@ -775,11 +824,21 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
                 .map(
                   (item) => `
                 <tr>
-                  <td style="border: 1px solid #ddd; padding: 8px;">${item.sku}</td>
-                  <td style="border: 1px solid #ddd; padding: 8px;">${item.name}</td>
-                  <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${item.quantity}</td>
-                  <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${parseFloat(item.price || 0).toFixed(2)}</td>
-                  <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${parseFloat(item.totalAmount || 0).toFixed(2)}</td>
+                  <td style="border: 1px solid #ddd; padding: 8px;">${
+                    item.sku
+                  }</td>
+                  <td style="border: 1px solid #ddd; padding: 8px;">${
+                    item.name
+                  }</td>
+                  <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${
+                    item.quantity
+                  }</td>
+                  <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${parseFloat(
+                    item.price || 0
+                  ).toFixed(2)}</td>
+                  <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${parseFloat(
+                    item.totalAmount || 0
+                  ).toFixed(2)}</td>
                 </tr>
               `
                 )
@@ -788,10 +847,14 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
           </table>
           <h3>Price Summary</h3>
           <ul style="list-style: none; padding: 0;">
-            <li><strong>Subtotal:</strong> $${parseFloat(subtotal).toFixed(2)}</li>
+            <li><strong>Subtotal:</strong> $${parseFloat(subtotal).toFixed(
+              2
+            )}</li>
             ${
               discount > 0
-                ? `<li><strong>Discount:</strong> $${parseFloat(discount).toFixed(2)}</li>`
+                ? `<li><strong>Discount:</strong> $${parseFloat(
+                    discount
+                  ).toFixed(2)}</li>`
                 : ""
             }
             <li><strong>Tax (7%):</strong> $${parseFloat(tax).toFixed(2)}</li>
@@ -861,8 +924,6 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-
-
 
 app.get("/api/orders", authenticateToken, async (req, res) => {
   try {
@@ -1526,7 +1587,6 @@ app.put("/api/orders/:id/cancel", authenticateToken, async (req, res) => {
   }
 });
 
-
 // app.get("/api/items", authenticateToken, async (req, res) => {
 //   try {
 //     const { item_type, value, sku_prefix,sku } = req.query;
@@ -1555,7 +1615,6 @@ app.put("/api/orders/:id/cancel", authenticateToken, async (req, res) => {
 //     res.status(500).json({ error: "Failed to fetch items", details: err.message });
 //   }
 // });
-
 
 app.get("/api/items", authenticateToken, async (req, res) => {
   try {
@@ -1615,87 +1674,85 @@ app.get("/api/user-stats", authenticateToken, async (req, res) => {
   }
 });
 
-
-
 // POST /api/addresses - Create a new billing or shipping address
 
-
 // POST /api/addresses
-app.post('/api/addresses', authenticateToken, async (req, res) => {
+app.post("/api/addresses", authenticateToken, async (req, res) => {
   const { type, address } = req.body;
   const userId = req.user.id;
 
   try {
     // Validate inputs
-    if (!['Billing', 'Shipping'].includes(type)) {
+    if (!["Billing", "Shipping"].includes(type)) {
       return res.status(400).json({
         error: 'Invalid address type. Must be "Billing" or "Shipping".',
       });
     }
     if (!address || !address.trim()) {
-      return res.status(400).json({ error: 'Address is required.' });
+      return res.status(400).json({ error: "Address is required." });
     }
 
     const connection = await pool.getConnection();
     await connection.beginTransaction();
 
     try {
-      if (type === 'Billing') {
+      if (type === "Billing") {
         // Check for existing billing address
         const [existingBilling] = await connection.query(
-          'SELECT id FROM user_addresses WHERE user_id = ? AND type = ?',
-          [userId, 'Billing']
+          "SELECT id FROM user_addresses WHERE user_id = ? AND type = ?",
+          [userId, "Billing"]
         );
 
         if (existingBilling.length > 0) {
           // Update existing billing address
           await connection.query(
-            'UPDATE user_addresses SET address = ?, updated_at = NOW() WHERE id = ?',
+            "UPDATE user_addresses SET address = ?, updated_at = NOW() WHERE id = ?",
             [address.trim(), existingBilling[0].id]
           );
         } else {
           // Insert new billing address
           await connection.query(
-            'INSERT INTO user_addresses (user_id, type, address) VALUES (?, ?, ?)',
-            [userId, 'Billing', address.trim()]
+            "INSERT INTO user_addresses (user_id, type, address) VALUES (?, ?, ?)",
+            [userId, "Billing", address.trim()]
           );
         }
       } else {
         // Check for duplicate shipping address (case-insensitive)
         const [existingShipping] = await connection.query(
-          'SELECT id FROM user_addresses WHERE user_id = ? AND type = ? AND LOWER(address) = LOWER(?)',
-          [userId, 'Shipping', address.trim()]
+          "SELECT id FROM user_addresses WHERE user_id = ? AND type = ? AND LOWER(address) = LOWER(?)",
+          [userId, "Shipping", address.trim()]
         );
 
         if (existingShipping.length > 0) {
           await connection.rollback();
           connection.release();
-          return res.status(400).json({ error: 'Duplicate shipping address not allowed.' });
+          return res
+            .status(400)
+            .json({ error: "Duplicate shipping address not allowed." });
         }
 
         // Insert new shipping address
         await connection.query(
-          'INSERT INTO user_addresses (user_id, type, address) VALUES (?, ?, ?)',
-          [userId, 'Shipping', address.trim()]
+          "INSERT INTO user_addresses (user_id, type, address) VALUES (?, ?, ?)",
+          [userId, "Shipping", address.trim()]
         );
       }
 
       await connection.commit();
       connection.release();
 
-      res.status(201).json({ message: 'Address saved successfully.' });
+      res.status(201).json({ message: "Address saved successfully." });
     } catch (err) {
       await connection.rollback();
       connection.release();
-      console.error('Transaction error:', err);
-      res.status(500).json({ error: 'Failed to save address.' });
+      console.error("Transaction error:", err);
+      res.status(500).json({ error: "Failed to save address." });
     }
   } catch (err) {
-    console.error('Server error:', err);
-    res.status(500).json({ error: 'Server error.' });
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Server error." });
   }
 });
-
 
 // GET /api/addresses - Retrieve all addresses for the user
 app.get("/api/addresses", authenticateToken, async (req, res) => {
@@ -1857,18 +1914,17 @@ app.delete("/api/addresses/:id", authenticateToken, async (req, res) => {
   }
 });
 
-
 // POST /api/contact
-app.post('/api/contact', authenticateToken, async (req, res) => {
+app.post("/api/contact", authenticateToken, async (req, res) => {
   const { name, email, subject, message } = req.body;
   const userId = req.user.id; // Extracted from JWT
 
   // Validate input
   if (!name || !email || !subject || !message) {
-    return res.status(400).json({ error: 'All fields are required' });
+    return res.status(400).json({ error: "All fields are required" });
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ error: 'Invalid email format' });
+    return res.status(400).json({ error: "Invalid email format" });
   }
 
   let messageId;
@@ -1885,11 +1941,11 @@ app.post('/api/contact', authenticateToken, async (req, res) => {
     // Send email to admin
     const mailOptions = {
       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-      to: 'aashish.shroff@zeta-v.com', // Admin email
+      to: "aashish.shroff@zeta-v.com", // Admin email
       subject: `New Contact Form Submission: ${subject}`,
       html: `
         <h3>New Contact Message</h3>
-        <p><strong>User ID:</strong> ${userId || 'Guest'}</p>
+        <p><strong>User ID:</strong> ${userId || "Guest"}</p>
         <p><strong>Name:</strong> ${name}</p>
         <p><strong>Email:</strong> ${email}</p>
         <p><strong>Subject:</strong> ${subject}</p>
@@ -1901,37 +1957,50 @@ app.post('/api/contact', authenticateToken, async (req, res) => {
     await transporter.sendMail(mailOptions);
 
     // Update status
-    await pool.query("UPDATE contact_messages SET status = 'processed' WHERE id = ?", [messageId]);
+    await pool.query(
+      "UPDATE contact_messages SET status = 'processed' WHERE id = ?",
+      [messageId]
+    );
 
-    res.status(200).json({ message: 'Message sent successfully' });
+    res.status(200).json({ message: "Message sent successfully" });
   } catch (error) {
-    console.error('Error processing contact form:', error);
+    console.error("Error processing contact form:", error);
     if (messageId) {
-      await pool.query("UPDATE contact_messages SET status = 'failed' WHERE id = ?", [messageId]);
+      await pool.query(
+        "UPDATE contact_messages SET status = 'failed' WHERE id = ?",
+        [messageId]
+      );
     }
-    res.status(500).json({ error: 'Failed to send message' });
+    res.status(500).json({ error: "Failed to send message" });
   }
 });
 
-
-app.post('/api/forgot-password', async (req, res) => {
+app.post("/api/forgot-password", async (req, res) => {
   const { email } = req.body;
 
-  if (!email) return res.status(400).json({ error: 'Email is required' });
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email format' });
+  if (!email) return res.status(400).json({ error: "Email is required" });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    return res.status(400).json({ error: "Invalid email format" });
 
   try {
-    const [users] = await pool.query('SELECT id, full_name FROM users WHERE email = ?', [email]);
-    if (users.length === 0) return res.status(404).json({ error: 'User not found' });
+    const [users] = await pool.query(
+      "SELECT id, full_name FROM users WHERE email = ?",
+      [email]
+    );
+    if (users.length === 0)
+      return res.status(404).json({ error: "User not found" });
 
-    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetToken = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
 
     // Delete previous token
-    await pool.query('DELETE FROM password_resets WHERE email = ?', [email]);
+    await pool.query("DELETE FROM password_resets WHERE email = ?", [email]);
 
     // Insert new token
-    await pool.query('INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)', [email, resetToken, expiresAt]);
+    await pool.query(
+      "INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)",
+      [email, resetToken, expiresAt]
+    );
 
     const data = { token: resetToken, email };
     const encodedData = base64url.encode(JSON.stringify(data));
@@ -1940,10 +2009,10 @@ app.post('/api/forgot-password', async (req, res) => {
     const mailOptions = {
       from: `"Studio Signature Cabinets" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: 'Password Reset Request',
+      subject: "Password Reset Request",
       html: `
         <h3>Password Reset Request</h3>
-        <p>Dear ${users[0].full_name || 'User'},</p>
+        <p>Dear ${users[0].full_name || "User"},</p>
         <p>We received a request to reset your password. Click the link below to set a new password:</p>
         <a href="${resetLink}" style="display:inline-block;padding:10px 20px;background-color:#007bff;color:#fff;text-decoration:none;border-radius:5px;">Reset Password</a>
         <p>This link will expire in 1 hour. If you didn’t request this, please ignore this email.</p>
@@ -1953,38 +2022,39 @@ app.post('/api/forgot-password', async (req, res) => {
 
     await transporter.sendMail(mailOptions);
 
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.status(200).json({ message: 'Password reset email sent successfully' });
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.status(200).json({ message: "Password reset email sent successfully" });
   } catch (error) {
-    console.error('Error processing forgot password:', error);
-    res.status(500).json({ error: 'Failed to send password reset email' });
+    console.error("Error processing forgot password:", error);
+    res.status(500).json({ error: "Failed to send password reset email" });
   }
 });
 
 // POST /api/reset-password
 
-
-app.post('/api/reset-password', async (req, res) => {
+app.post("/api/reset-password", async (req, res) => {
   const { email, token, newPassword, confirmPassword } = req.body;
 
   if (!email || !token || !newPassword || !confirmPassword) {
-    return res.status(400).json({ error: 'All fields are required' });
+    return res.status(400).json({ error: "All fields are required" });
   }
 
   if (newPassword !== confirmPassword) {
-    return res.status(400).json({ error: 'New passwords do not match' });
+    return res.status(400).json({ error: "New passwords do not match" });
   }
 
-  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
+  const passwordRegex =
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
   if (!passwordRegex.test(newPassword) || /\s/.test(newPassword)) {
     return res.status(400).json({
-      error: 'Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces',
+      error:
+        "Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces",
     });
   }
 
   try {
     // Log inputs
-    console.log('Reset Password Payload:', { email, token });
+    console.log("Reset Password Payload:", { email, token });
 
     const [resets] = await pool.query(
       `SELECT * FROM password_resets WHERE email = ? AND token = ? AND expires_at > CONVERT_TZ(NOW(), 'SYSTEM', '+00:00')`,
@@ -1992,28 +2062,40 @@ app.post('/api/reset-password', async (req, res) => {
     );
 
     if (resets.length === 0) {
-      return res.status(400).json({ error: 'Invalid or expired reset token' });
+      return res.status(400).json({ error: "Invalid or expired reset token" });
     }
 
-    const [users] = await pool.query('SELECT id, full_name FROM users WHERE email = ?', [email]);
+    const [users] = await pool.query(
+      "SELECT id, full_name FROM users WHERE email = ?",
+      [email]
+    );
     if (users.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     const user = users[0];
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, user.id]);
-    await pool.query('DELETE FROM password_resets WHERE email = ? AND token = ?', [email, token]);
+    await pool.query("UPDATE users SET password = ? WHERE id = ?", [
+      hashedPassword,
+      user.id,
+    ]);
+    await pool.query(
+      "DELETE FROM password_resets WHERE email = ? AND token = ?",
+      [email, token]
+    );
 
     const mailOptions = {
       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
       to: email,
-      subject: 'Password Reset Confirmation',
+      subject: "Password Reset Confirmation",
       html: `
         <h3>Password Reset Confirmation</h3>
-        <p>Dear ${user.full_name || 'User'},</p>
-        <p>Your password has been successfully reset on ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })} IST.</p>
+        <p>Dear ${user.full_name || "User"},</p>
+        <p>Your password has been successfully reset on ${new Date().toLocaleString(
+          "en-US",
+          { timeZone: "Asia/Kolkata" }
+        )} IST.</p>
         <p>If you did not perform this action, please contact our support team immediately at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
         <p>Best regards,<br>Studio Signature Cabinets Team</p>
       `,
@@ -2021,13 +2103,12 @@ app.post('/api/reset-password', async (req, res) => {
 
     await transporter.sendMail(mailOptions);
 
-    res.status(200).json({ message: 'Password reset successfully' });
+    res.status(200).json({ message: "Password reset successfully" });
   } catch (error) {
-    console.error('Error resetting password:', error);
-    res.status(500).json({ error: 'Failed to reset password' });
+    console.error("Error resetting password:", error);
+    res.status(500).json({ error: "Failed to reset password" });
   }
 });
-
 
 // Fetch visible media for customers
 app.get("/api/elearning", async (req, res) => {
@@ -2047,10 +2128,7 @@ app.get("/api/elearning", async (req, res) => {
   }
 });
 
-
 //-------------------------------------------Admin Apis ------------------------------------------------------------
-
-
 
 // Admin Registration API
 
@@ -2302,40 +2380,47 @@ app.put("/api/admin/profile", adminauthenticateToken, async (req, res) => {
 
 // Update Admin Password
 
-app.put('/api/admin/password', adminauthenticateToken, async (req, res) => {
+app.put("/api/admin/password", adminauthenticateToken, async (req, res) => {
   const { currentPassword, newPassword, confirmPassword } = req.body;
 
   // Validation
   if (!currentPassword || !newPassword || !confirmPassword) {
-    return res.status(400).json({ error: 'All password fields are required' });
+    return res.status(400).json({ error: "All password fields are required" });
   }
 
-  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
+  const passwordRegex =
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
   if (!passwordRegex.test(newPassword) || /\s/.test(newPassword)) {
     return res.status(400).json({
-      error: 'Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces',
+      error:
+        "Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces",
     });
   }
 
   if (newPassword !== confirmPassword) {
-    return res.status(400).json({ error: 'New password and confirm password do not match' });
+    return res
+      .status(400)
+      .json({ error: "New password and confirm password do not match" });
   }
 
   try {
     // Fetch current password and email
     const [admins] = await pool.query(
-      'SELECT id, password, email FROM admins WHERE id = ?',
+      "SELECT id, password, email FROM admins WHERE id = ?",
       [req.admin.id]
     );
 
     if (admins.length === 0) {
-      return res.status(404).json({ error: 'Admin not found' });
+      return res.status(404).json({ error: "Admin not found" });
     }
 
     // Verify current password
-    const isPasswordValid = await bcrypt.compare(currentPassword, admins[0].password);
+    const isPasswordValid = await bcrypt.compare(
+      currentPassword,
+      admins[0].password
+    );
     if (!isPasswordValid) {
-      return res.status(401).json({ error: 'Current password is incorrect' });
+      return res.status(401).json({ error: "Current password is incorrect" });
     }
 
     // Hash new password
@@ -2343,7 +2428,7 @@ app.put('/api/admin/password', adminauthenticateToken, async (req, res) => {
 
     // Update password
     await pool.query(
-      'UPDATE admins SET password = ?, updated_at = NOW() WHERE id = ?',
+      "UPDATE admins SET password = ?, updated_at = NOW() WHERE id = ?",
       [hashedPassword, req.admin.id]
     );
 
@@ -2351,40 +2436,42 @@ app.put('/api/admin/password', adminauthenticateToken, async (req, res) => {
     await transporter.sendMail({
       from: `"Studio Signature Cabinets" <sssdemo6@gmail.com>`,
       to: admins[0].email,
-      subject: 'Admin Password Update Confirmation',
+      subject: "Admin Password Update Confirmation",
       html: `
         <p>Your admin account password has been successfully updated.</p>
         <p>If you did not perform this action, please contact support immediately.</p>
       `,
     });
 
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.json({ message: 'Password updated successfully' });
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.json({ message: "Password updated successfully" });
   } catch (err) {
-    console.error('Server error:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-
-app.post('/api/admin/forgot-password', async (req, res) => {
+app.post("/api/admin/forgot-password", async (req, res) => {
   const { email } = req.body;
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ error: 'Valid email is required' });
+    return res.status(400).json({ error: "Valid email is required" });
   }
 
   try {
-    const [admins] = await pool.query('SELECT id, email FROM admins WHERE email = ?', [email]);
+    const [admins] = await pool.query(
+      "SELECT id, email FROM admins WHERE email = ?",
+      [email]
+    );
     if (admins.length === 0) {
-      return res.status(404).json({ error: 'Admin not found' });
+      return res.status(404).json({ error: "Admin not found" });
     }
 
-    const token = crypto.randomBytes(32).toString('hex');
+    const token = crypto.randomBytes(32).toString("hex");
     const expires = new Date(Date.now() + 3600000); // 1 hour
 
     await pool.query(
-      'INSERT INTO admin_password_resets (email, token, created_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE token = ?, created_at = ?',
+      "INSERT INTO admin_password_resets (email, token, created_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE token = ?, created_at = ?",
       [email, token, new Date(), token, new Date()]
     );
 
@@ -2395,7 +2482,7 @@ app.post('/api/admin/forgot-password', async (req, res) => {
     await transporter.sendMail({
       from: `"Studio Signature Cabinets" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: 'Admin Password Reset Request',
+      subject: "Admin Password Reset Request",
       html: `
         <p>You requested a password reset for your admin account.</p>
         <p>Click <a href="${resetLink}">here</a> to reset your password.</p>
@@ -2404,82 +2491,91 @@ app.post('/api/admin/forgot-password', async (req, res) => {
       `,
     });
 
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.json({ message: 'Password reset email sent successfully' });
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.json({ message: "Password reset email sent successfully" });
   } catch (err) {
-    console.error('Server error:', err);
-    res.status(500).json({ error: 'Failed to send password reset email' });
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Failed to send password reset email" });
   }
 });
 
-
 // POST /api/admin/reset-password
-app.post('/api/admin/reset-password', async (req, res) => {
+app.post("/api/admin/reset-password", async (req, res) => {
   const { email, token, newPassword, confirmPassword } = req.body;
 
   if (!email || !token || !newPassword || !confirmPassword) {
-    return res.status(400).json({ error: 'All fields are required' });
+    return res.status(400).json({ error: "All fields are required" });
   }
 
   if (newPassword !== confirmPassword) {
-    return res.status(400).json({ error: 'New password and confirm password do not match' });
+    return res
+      .status(400)
+      .json({ error: "New password and confirm password do not match" });
   }
 
-  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
+  const passwordRegex =
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
   if (!passwordRegex.test(newPassword) || /\s/.test(newPassword)) {
     return res.status(400).json({
-      error: 'Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces',
+      error:
+        "Password must be at least 8 characters, include one uppercase, one lowercase, one number, one special character, and no spaces",
     });
   }
 
   try {
     const [resetRequests] = await pool.query(
-      'SELECT created_at FROM admin_password_resets WHERE email = ? AND token = ?',
+      "SELECT created_at FROM admin_password_resets WHERE email = ? AND token = ?",
       [email, token]
     );
 
     if (resetRequests.length === 0) {
-      return res.status(400).json({ error: 'Invalid or expired reset token' });
+      return res.status(400).json({ error: "Invalid or expired reset token" });
     }
 
     const createdAt = new Date(resetRequests[0].created_at);
-    if (Date.now() - createdAt.getTime() > 3600000) { // 1 hour
-      await pool.query('DELETE FROM admin_password_resets WHERE email = ?', [email]);
-      return res.status(400).json({ error: 'Reset token has expired' });
+    if (Date.now() - createdAt.getTime() > 3600000) {
+      // 1 hour
+      await pool.query("DELETE FROM admin_password_resets WHERE email = ?", [
+        email,
+      ]);
+      return res.status(400).json({ error: "Reset token has expired" });
     }
 
-    const [admins] = await pool.query('SELECT id FROM admins WHERE email = ?', [email]);
+    const [admins] = await pool.query("SELECT id FROM admins WHERE email = ?", [
+      email,
+    ]);
     if (admins.length === 0) {
-      return res.status(404).json({ error: 'Admin not found' });
+      return res.status(404).json({ error: "Admin not found" });
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
     await pool.query(
-      'UPDATE admins SET password = ?, updated_at = NOW() WHERE id = ?',
+      "UPDATE admins SET password = ?, updated_at = NOW() WHERE id = ?",
       [hashedPassword, admins[0].id]
     );
 
-    await pool.query('DELETE FROM admin_password_resets WHERE email = ?', [email]);
+    await pool.query("DELETE FROM admin_password_resets WHERE email = ?", [
+      email,
+    ]);
 
     await transporter.sendMail({
       from: `"Studio Signature Cabinets" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: 'Admin Password Reset Confirmation',
+      subject: "Admin Password Reset Confirmation",
       html: `
         <p>Your admin account password has been successfully reset.</p>
         <p>If you did not perform this action, please contact support immediately.</p>
       `,
     });
 
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.json({ message: 'Password reset successfully' });
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.json({ message: "Password reset successfully" });
   } catch (err) {
-    console.error('Server error:', err);
-    res.status(500).json({ error: 'Failed to reset password' });
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Failed to reset password" });
   }
 });
-
 
 // Fetch All Users
 // app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
@@ -2538,11 +2634,7 @@ app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
   }
 });
 
-
-
 // fetch all vendors
-
-
 
 app.get("/api/admin/vendors", adminauthenticateToken, async (req, res) => {
   try {
@@ -2570,7 +2662,8 @@ app.get("/api/admin/vendors", adminauthenticateToken, async (req, res) => {
   }
 });
 
-app.put( "/api/admin/vendor/:id/status",
+app.put(
+  "/api/admin/vendor/:id/status",
   adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
@@ -2608,12 +2701,14 @@ app.put( "/api/admin/vendor/:id/status",
         const mailOptions = {
           from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
           to: vendor.email,
-          subject: "Your Studio Signature Cabinets Vendor Account Has Been Approved!",
+          subject:
+            "Your Studio Signature Cabinets Vendor Account Has Been Approved!",
           html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <h2>Welcome, ${vendor.full_name}!</h2>
             <p>Great news! Your <strong>${
-              vendor.user_type.charAt(0).toUpperCase() + vendor.user_type.slice(1)
+              vendor.user_type.charAt(0).toUpperCase() +
+              vendor.user_type.slice(1)
             }</strong> account with Studio Signature Cabinets has been approved.</p>
             <p>You can now log in to your account and start exploring our platform:</p>
             <p style="text-align: center;">
@@ -2624,7 +2719,8 @@ app.put( "/api/admin/vendor/:id/status",
               <li><strong>Full Name:</strong> ${vendor.full_name}</li>
               <li><strong>Email:</strong> ${vendor.email}</li>
               <li><strong>User Type:</strong> ${
-                vendor.user_type.charAt(0).toUpperCase() + vendor.user_type.slice(1)
+                vendor.user_type.charAt(0).toUpperCase() +
+                vendor.user_type.slice(1)
               }</li>
             </ul>
             <p>If you have any questions, please contact our support team at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
@@ -2649,9 +2745,10 @@ app.put( "/api/admin/vendor/:id/status",
   }
 );
 
-
 // Update Customer Discount
-app.put("/api/admin/user/:id/discount",adminauthenticateToken,
+app.put(
+  "/api/admin/user/:id/discount",
+  adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { admin_discount } = req.body;
@@ -2692,7 +2789,9 @@ app.put("/api/admin/user/:id/discount",adminauthenticateToken,
 
 // Update User Status
 
-app.put("/api/admin/user/:id/status",adminauthenticateToken,
+app.put(
+  "/api/admin/user/:id/status",
+  adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
@@ -2769,7 +2868,6 @@ app.put("/api/admin/user/:id/status",adminauthenticateToken,
     }
   }
 );
-
 
 app.get("/api/admin/orders", adminauthenticateToken, async (req, res) => {
   try {
@@ -2850,7 +2948,6 @@ app.get("/api/admin/orders", adminauthenticateToken, async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-
 
 app.get("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
   const orderId = req.params.id;
@@ -2945,7 +3042,6 @@ app.get("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-
 
 app.post("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
   const { id } = req.params;
@@ -3100,7 +3196,9 @@ app.post("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
 });
 
 // PUT /api/admin/orders/:id/shipping (fallback)
-app.put("/api/admin/orders/:id/shipping", adminauthenticateToken,
+app.put(
+  "/api/admin/orders/:id/shipping",
+  adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { shipping, additional_discount } = req.body;
@@ -3254,16 +3352,18 @@ app.put("/api/admin/orders/:id/shipping", adminauthenticateToken,
   }
 );
 
-
-
-app.put("/api/admin/orders/:id/status",adminauthenticateToken,
+app.put(
+  "/api/admin/orders/:id/status",
+  adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
     // Validate status
     if (
-      !["Pending", "Accepted", "Processing", "Completed", "Cancelled"].includes(status)
+      !["Pending", "Accepted", "Processing", "Completed", "Cancelled"].includes(
+        status
+      )
     ) {
       return res.status(400).json({
         error:
@@ -3325,20 +3425,44 @@ app.put("/api/admin/orders/:id/status",adminauthenticateToken,
               html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>Great news! Your order <strong>#${order.order_id}</strong> has been accepted and is now being processed.</p>
+                <p>Great news! Your order <strong>#${
+                  order.order_id
+                }</strong> has been accepted and is now being processed.</p>
                 <h3>Order Details:</h3>
                 <ul style="list-style: none; padding: 0;">
                   <li><strong>Order ID:</strong> ${order.order_id}</li>
                   <li><strong>Door Style:</strong> ${order.door_style}</li>
                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
-                  ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
-                  ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
-                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
-                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
-                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
+                  ${
+                    order.stain_option
+                      ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+                      : ""
+                  }
+                  ${
+                    order.paint_option
+                      ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+                      : ""
+                  }
+                  <li><strong>Subtotal:</strong> $${parseFloat(
+                    order.subtotal
+                  ).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(
+                    order.discount || 0
+                  ).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+                order.additional_discount || 0
+              ).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+                    2
+                  )}</li>
+                  <li><strong>Shipping:</strong> ${
+                    order.shipping !== null
+                      ? `$${parseFloat(order.shipping).toFixed(2)}`
+                      : "-"
+                  }</li>
+                  <li><strong>Total:</strong> $${parseFloat(
+                    order.total
+                  ).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -3360,20 +3484,44 @@ app.put("/api/admin/orders/:id/status",adminauthenticateToken,
               html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>Your order <strong>#${order.order_id}</strong> is now being processed. We're preparing your items for shipment.</p>
+                <p>Your order <strong>#${
+                  order.order_id
+                }</strong> is now being processed. We're preparing your items for shipment.</p>
                 <h3>Order Details:</h3>
                 <ul style="list-style: none; padding: 0;">
                   <li><strong>Order ID:</strong> ${order.order_id}</li>
                   <li><strong>Door Style:</strong> ${order.door_style}</li>
                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
-                  ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
-                  ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
-                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
-                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
-                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
+                  ${
+                    order.stain_option
+                      ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+                      : ""
+                  }
+                  ${
+                    order.paint_option
+                      ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+                      : ""
+                  }
+                  <li><strong>Subtotal:</strong> $${parseFloat(
+                    order.subtotal
+                  ).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(
+                    order.discount || 0
+                  ).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+                order.additional_discount || 0
+              ).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+                    2
+                  )}</li>
+                  <li><strong>Shipping:</strong> ${
+                    order.shipping !== null
+                      ? `$${parseFloat(order.shipping).toFixed(2)}`
+                      : "-"
+                  }</li>
+                  <li><strong>Total:</strong> $${parseFloat(
+                    order.total
+                  ).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -3395,20 +3543,44 @@ app.put("/api/admin/orders/:id/status",adminauthenticateToken,
               html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>Fantastic news! Your order <strong>#${order.order_id}</strong> has been completed and shipped.</p>
+                <p>Fantastic news! Your order <strong>#${
+                  order.order_id
+                }</strong> has been completed and shipped.</p>
                 <h3>Order Details:</h3>
                 <ul style="list-style: none; padding: 0;">
                   <li><strong>Order ID:</strong> ${order.order_id}</li>
                   <li><strong>Door Style:</strong> ${order.door_style}</li>
                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
-                  ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
-                  ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
-                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
-                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
-                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
+                  ${
+                    order.stain_option
+                      ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+                      : ""
+                  }
+                  ${
+                    order.paint_option
+                      ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+                      : ""
+                  }
+                  <li><strong>Subtotal:</strong> $${parseFloat(
+                    order.subtotal
+                  ).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(
+                    order.discount || 0
+                  ).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+                order.additional_discount || 0
+              ).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+                    2
+                  )}</li>
+                  <li><strong>Shipping:</strong> ${
+                    order.shipping !== null
+                      ? `$${parseFloat(order.shipping).toFixed(2)}`
+                      : "-"
+                  }</li>
+                  <li><strong>Total:</strong> $${parseFloat(
+                    order.total
+                  ).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -3430,21 +3602,45 @@ app.put("/api/admin/orders/:id/status",adminauthenticateToken,
               html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>We’re sorry to inform you that your order <strong>#${order.order_id}</strong> has been cancelled.</p>
+                <p>We’re sorry to inform you that your order <strong>#${
+                  order.order_id
+                }</strong> has been cancelled.</p>
                 <p><strong>Note:</strong> This order cannot be reinstated or modified once cancelled.</p>
                 <h3>Order Details:</h3>
                 <ul style="list-style: none; padding: 0;">
                   <li><strong>Order ID:</strong> ${order.order_id}</li>
                   <li><strong>Door Style:</strong> ${order.door_style}</li>
                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
-                  ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
-                  ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
-                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
-                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
-                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
+                  ${
+                    order.stain_option
+                      ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+                      : ""
+                  }
+                  ${
+                    order.paint_option
+                      ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+                      : ""
+                  }
+                  <li><strong>Subtotal:</strong> $${parseFloat(
+                    order.subtotal
+                  ).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(
+                    order.discount || 0
+                  ).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+                order.additional_discount || 0
+              ).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+                    2
+                  )}</li>
+                  <li><strong>Shipping:</strong> ${
+                    order.shipping !== null
+                      ? `$${parseFloat(order.shipping).toFixed(2)}`
+                      : "-"
+                  }</li>
+                  <li><strong>Total:</strong> $${parseFloat(
+                    order.total
+                  ).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -3461,7 +3657,9 @@ app.put("/api/admin/orders/:id/status",adminauthenticateToken,
 
         try {
           await transporter.sendMail(mailOptions);
-          console.log(`Email sent for order ${order.order_id} status: ${status}`);
+          console.log(
+            `Email sent for order ${order.order_id} status: ${status}`
+          );
         } catch (emailErr) {
           console.error(`Failed to send email for ${status} status:`, emailErr);
           // Log error but don't fail the status update
@@ -3476,11 +3674,12 @@ app.put("/api/admin/orders/:id/status",adminauthenticateToken,
   }
 );
 
-
-
 // Schedule task to run every minute
 cron.schedule("* * * * *", async () => {
-  console.log("Running auto-accept orders task at", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }));
+  console.log(
+    "Running auto-accept orders task at",
+    new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+  );
 
   try {
     // Query for Pending orders older than 24 hours (adjusted for IST)
@@ -3510,7 +3709,9 @@ cron.schedule("* * * * *", async () => {
           : "0.00";
 
       // Update order status to Accepted
-      await pool.query("UPDATE orders SET status = 'Accepted' WHERE id = ?", [order.id]);
+      await pool.query("UPDATE orders SET status = 'Accepted' WHERE id = ?", [
+        order.id,
+      ]);
       console.log(`Order ${order.order_id} auto-accepted after 24 hours.`);
 
       // Send email if email is available
@@ -3522,20 +3723,44 @@ cron.schedule("* * * * *", async () => {
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
               <h2>Hello, ${user.full_name}!</h2>
-              <p>Great news! Your order <strong>#${order.order_id}</strong> has been accepted and is now being processed.</p>
+              <p>Great news! Your order <strong>#${
+                order.order_id
+              }</strong> has been accepted and is now being processed.</p>
               <h3>Order Details:</h3>
               <ul style="list-style: none; padding: 0;">
                 <li><strong>Order ID:</strong> ${order.order_id}</li>
                 <li><strong>Door Style:</strong> ${order.door_style}</li>
                 <li><strong>Finish Type:</strong> ${order.finish_type}</li>
-                ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
-                ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
-                <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
-                <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
-                <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
-                <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
-                <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
-                <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
+                ${
+                  order.stain_option
+                    ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+                    : ""
+                }
+                ${
+                  order.paint_option
+                    ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+                    : ""
+                }
+                <li><strong>Subtotal:</strong> $${parseFloat(
+                  order.subtotal
+                ).toFixed(2)}</li>
+                <li><strong>Special Discount:</strong> $${parseFloat(
+                  order.discount || 0
+                ).toFixed(2)}</li>
+                <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+            order.additional_discount || 0
+          ).toFixed(2)})</li>
+                <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+                  2
+                )}</li>
+                <li><strong>Shipping:</strong> ${
+                  order.shipping !== null
+                    ? `$${parseFloat(order.shipping).toFixed(2)}`
+                    : "-"
+                }</li>
+                <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(
+                  2
+                )}</li>
               </ul>
               <p><strong>Next Steps:</strong></p>
               <ul>
@@ -3551,9 +3776,14 @@ cron.schedule("* * * * *", async () => {
 
         try {
           await transporter.sendMail(mailOptions);
-          console.log(`Email sent for order ${order.order_id} status: Accepted`);
+          console.log(
+            `Email sent for order ${order.order_id} status: Accepted`
+          );
         } catch (emailErr) {
-          console.error(`Failed to send email for order ${order.order_id}:`, emailErr);
+          console.error(
+            `Failed to send email for order ${order.order_id}:`,
+            emailErr
+          );
         }
       }
     }
@@ -3561,12 +3791,6 @@ cron.schedule("* * * * *", async () => {
     console.error("Error in auto-accept orders task:", err);
   }
 });
-
-
-
-
-
-
 
 // app.put("/api/admin/orders/:id/status", adminauthenticateToken, async (req, res) => {
 //   const { id } = req.params;
@@ -3582,11 +3806,11 @@ cron.schedule("* * * * *", async () => {
 //   try {
 //     // Check if order exists and fetch details
 //     const [orders] = await pool.query(
-//       `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option, 
-//               o.subtotal, o.tax, o.shipping, o.discount, o.additional_discount, o.total, o.status, 
-//               u.full_name, u.email 
-//        FROM orders o 
-//        LEFT JOIN users u ON o.user_id = u.id 
+//       `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option,
+//               o.subtotal, o.tax, o.shipping, o.discount, o.additional_discount, o.total, o.status,
+//               u.full_name, u.email
+//        FROM orders o
+//        LEFT JOIN users u ON o.user_id = u.id
 //        WHERE o.id = ?`,
 //       [id]
 //     );
@@ -3618,11 +3842,11 @@ cron.schedule("* * * * *", async () => {
 //     // If status is Completed, check for pending orders older than 24 hours
 //     if (status === "Completed") {
 //       const [pendingOrders] = await pool.query(
-//         `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option, 
-//                 o.subtotal, o.tax, o.shipping, o.discount, o.additional_discount, o.total, o.status, 
-//                 u.full_name, u.email 
-//          FROM orders o 
-//          LEFT JOIN users u ON o.user_id = u.id 
+//         `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option,
+//                 o.subtotal, o.tax, o.shipping, o.discount, o.additional_discount, o.total, o.status,
+//                 u.full_name, u.email
+//          FROM orders o
+//          LEFT JOIN users u ON o.user_id = u.id
 //          WHERE o.status = 'Pending' AND o.created_at < DATEADD(HOUR, -24, GETDATE())`
 //       );
 
@@ -3846,12 +4070,11 @@ cron.schedule("* * * * *", async () => {
 //   }
 // });
 
-
 // Delete Order
 
-
-
-app.delete("/api/admin/orders/:id", adminauthenticateToken,
+app.delete(
+  "/api/admin/orders/:id",
+  adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
 
@@ -3875,59 +4098,64 @@ app.delete("/api/admin/orders/:id", adminauthenticateToken,
   }
 );
 
-
-
 // GET /api/contact/messages
-app.get('/api/admin/contact/messages', adminauthenticateToken, async (req, res) => {
-  try {
-    const query = `
+app.get(
+  "/api/admin/contact/messages",
+  adminauthenticateToken,
+  async (req, res) => {
+    try {
+      const query = `
       SELECT id, user_id, name, email, subject, message, status, created_at
       FROM contact_messages
       ORDER BY created_at DESC
     `;
-    const [messages] = await pool.query(query);
-    res.status(200).json(messages);
-  } catch (error) {
-    console.error('Error fetching contact messages:', error);
-    res.status(500).json({ error: 'Failed to fetch messages' });
+      const [messages] = await pool.query(query);
+      res.status(200).json(messages);
+    } catch (error) {
+      console.error("Error fetching contact messages:", error);
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
   }
-});
-
-
+);
 
 // Upload media
-app.post("/api/admin/elearning/upload", adminauthenticateToken, upload.single("media"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
-    const { description, media_type } = req.body;
-    if (!["image", "video"].includes(media_type)) {
-      return res.status(400).json({ error: "Invalid media type" });
-    }
+app.post(
+  "/api/admin/elearning/upload",
+  adminauthenticateToken,
+  upload.single("media"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+      const { description, media_type } = req.body;
+      if (!["image", "video"].includes(media_type)) {
+        return res.status(400).json({ error: "Invalid media type" });
+      }
 
-    const filePath = `/uploads/${req.file.filename}`;
-    const [result] = await pool.query(
-      "INSERT INTO elearning_media (media_type, file_path, description, is_visible) VALUES (?, ?, ?, 1)",
-      [media_type, filePath, description || null]
-    );
+      const filePath = `/uploads/${req.file.filename}`;
+      const [result] = await pool.query(
+        "INSERT INTO elearning_media (media_type, file_path, description, is_visible) VALUES (?, ?, ?, 1)",
+        [media_type, filePath, description || null]
+      );
 
-    res.json({
-      media: {
-        id: result.insertId,
-        media_type,
-        file_path: `${req.protocol}://${req.get("host")}${filePath}`,
-        description: description || null,
-        is_visible: 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    });
-  } catch (err) {
-    console.error("Upload error:", err);
-    res.status(500).json({ error: err.message || "Server error" });
+      res.json({
+        media: {
+          id: result.insertId,
+          media_type,
+          file_path: `${req.protocol}://${req.get("host")}${filePath}`,
+          description: description || null,
+          is_visible: 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      });
+    } catch (err) {
+      console.error("Upload error:", err);
+      res.status(500).json({ error: err.message || "Server error" });
+    }
   }
-});
+);
 
 // Fetch all media for admin
 app.get("/api/admin/elearning", adminauthenticateToken, async (req, res) => {
@@ -3948,61 +4176,77 @@ app.get("/api/admin/elearning", adminauthenticateToken, async (req, res) => {
 });
 
 // Toggle visibility
-app.put("/api/admin/elearning/:id/toggle", adminauthenticateToken, async (req, res) => {
-  const { id } = req.params;
-  const { is_visible } = req.body;
+app.put(
+  "/api/admin/elearning/:id/toggle",
+  adminauthenticateToken,
+  async (req, res) => {
+    const { id } = req.params;
+    const { is_visible } = req.body;
 
-  if (![0, 1].includes(Number(is_visible))) {
-    return res.status(400).json({ error: "Invalid visibility value" });
-  }
-
-  try {
-    const [result] = await pool.query(
-      "UPDATE elearning_media SET is_visible = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [is_visible, id]
-    );
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "Media not found" });
+    if (![0, 1].includes(Number(is_visible))) {
+      return res.status(400).json({ error: "Invalid visibility value" });
     }
-    res.json({ message: "Visibility updated successfully" });
-  } catch (err) {
-    console.error("Toggle error:", err);
-    res.status(500).json({ error: "Server error" });
+
+    try {
+      const [result] = await pool.query(
+        "UPDATE elearning_media SET is_visible = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [is_visible, id]
+      );
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: "Media not found" });
+      }
+      res.json({ message: "Visibility updated successfully" });
+    } catch (err) {
+      console.error("Toggle error:", err);
+      res.status(500).json({ error: "Server error" });
+    }
   }
-});
-
-
+);
 
 // Delete media
-app.delete("/api/admin/elearning/:id", adminauthenticateToken, async (req, res) => {
-  const { id } = req.params;
+app.delete(
+  "/api/admin/elearning/:id",
+  adminauthenticateToken,
+  async (req, res) => {
+    const { id } = req.params;
 
-  try {
-    // Fetch file_path to delete the file
-    const [rows] = await pool.query("SELECT file_path FROM elearning_media WHERE id = ?", [id]);
-    if (rows.length === 0) {
-      return res.status(404).json({ error: "Media not found" });
-    }
-
-    const filePath = path.join(__dirname, "../../public_html", rows[0].file_path);
     try {
-      await fs.unlink(filePath); // Delete file from server
+      // Fetch file_path to delete the file
+      const [rows] = await pool.query(
+        "SELECT file_path FROM elearning_media WHERE id = ?",
+        [id]
+      );
+      if (rows.length === 0) {
+        return res.status(404).json({ error: "Media not found" });
+      }
+
+      const filePath = path.join(
+        __dirname,
+        "../../public_html",
+        rows[0].file_path
+      );
+      try {
+        await fs.unlink(filePath); // Delete file from server
+      } catch (err) {
+        console.warn(`Failed to delete file ${filePath}:`, err.message);
+        // Continue with database deletion even if file deletion fails
+      }
+
+      const [result] = await pool.query(
+        "DELETE FROM elearning_media WHERE id = ?",
+        [id]
+      );
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: "Media not found" });
+      }
+
+      res.json({ message: "Media deleted successfully" });
     } catch (err) {
-      console.warn(`Failed to delete file ${filePath}:`, err.message);
-      // Continue with database deletion even if file deletion fails
+      console.error("Delete error:", err);
+      res.status(500).json({ error: "Server error" });
     }
-
-    const [result] = await pool.query("DELETE FROM elearning_media WHERE id = ?", [id]);
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "Media not found" });
-    }
-
-    res.json({ message: "Media deleted successfully" });
-  } catch (err) {
-    console.error("Delete error:", err);
-    res.status(500).json({ error: "Server error" });
   }
-});
+);
 
 // Validation functions
 const validateEmail = (email) => {
@@ -4011,7 +4255,8 @@ const validateEmail = (email) => {
 };
 
 const validatePassword = (password) => {
-  const re = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+  const re =
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
   return re.test(password) && !/\s/.test(password);
 };
 
@@ -4020,330 +4265,434 @@ const validatePhone = (phone) => {
   return re.test(phone);
 };
 
-
-
-
 // Fetch all admins
-app.get("/api/adminuserpanel/admins", adminauthenticateToken, async (req, res) => {
-  try {
-    const [adminUsers] = await pool.query(
-      "SELECT id, full_name AS fullName, email, role AS userType, created_at, updated_at FROM admins"
-    );
-    console.log("Fetched admins:", adminUsers); // Debug log
-    res.json({ admins: adminUsers });
-  } catch (err) {
-    console.error("Fetch admins error:", err);
-    res.status(500).json({ error: "Server error" });
+app.get(
+  "/api/adminuserpanel/admins",
+  adminauthenticateToken,
+  async (req, res) => {
+    try {
+      const [adminUsers] = await pool.query(
+        "SELECT id, full_name AS fullName, email, role AS userType, created_at, updated_at FROM admins"
+      );
+      console.log("Fetched admins:", adminUsers); // Debug log
+      res.json({ admins: adminUsers });
+    } catch (err) {
+      console.error("Fetch admins error:", err);
+      res.status(500).json({ error: "Server error" });
+    }
   }
-});
+);
 
 // Fetch all users (customers/vendors)
-app.get("/api/adminuserpanel/users", adminauthenticateToken, async (req, res) => {
-  try {
-    const [customerVendorUsers] = await pool.query(
-      "SELECT id, full_name AS fullName, email, user_type AS userType, created_at, updated_at FROM users "
-    );
-    console.log("Fetched users:", customerVendorUsers); // Debug log
-    res.json({ users: customerVendorUsers });
-  } catch (err) {
-    console.error("Fetch users error:", err);
-    res.status(500).json({ error: "Server error" });
+app.get(
+  "/api/adminuserpanel/users",
+  adminauthenticateToken,
+  async (req, res) => {
+    try {
+      const [customerVendorUsers] = await pool.query(
+        "SELECT id, full_name AS fullName, email, user_type AS userType, created_at, updated_at FROM users "
+      );
+      console.log("Fetched users:", customerVendorUsers); // Debug log
+      res.json({ users: customerVendorUsers });
+    } catch (err) {
+      console.error("Fetch users error:", err);
+      res.status(500).json({ error: "Server error" });
+    }
   }
-});
-
-
-
+);
 
 // Admin registration
-app.post("/api/adminuserpanel/register", adminauthenticateToken, async (req, res) => {
-  const { fullName, email, password, confirmPassword, phone, bio } = req.body;
+app.post(
+  "/api/adminuserpanel/register",
+  adminauthenticateToken,
+  async (req, res) => {
+    const { fullName, email, password, confirmPassword, phone, bio } = req.body;
 
-  // Validate input
-  if (!fullName || !email || !password || !confirmPassword) {
-    return res.status(400).json({ error: "All required fields must be provided" });
-  }
-  if (!validateEmail(email)) {
-    return res.status(400).json({ error: "Invalid email address" });
-  }
-  if (!validatePassword(password)) {
-    return res.status(400).json({ error: "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character" });
-  }
-  if (password !== confirmPassword) {
-    return res.status(400).json({ error: "Passwords do not match" });
-  }
-  if (phone && !validatePhone(phone)) {
-    return res.status(400).json({ error: "Phone number must be exactly 10 digits" });
-  }
-
-  try {
-    // Check if email exists in admins or users table
-    const [adminEmail] = await pool.query("SELECT id FROM admins WHERE email = ?", [email]);
-    const [userEmail] = await pool.query("SELECT id FROM users WHERE email = ?", [email]);
-    if (adminEmail.length > 0 || userEmail.length > 0) {
-      return res.status(400).json({ error: "Email already exists" });
+    // Validate input
+    if (!fullName || !email || !password || !confirmPassword) {
+      return res
+        .status(400)
+        .json({ error: "All required fields must be provided" });
+    }
+    if (!validateEmail(email)) {
+      return res.status(400).json({ error: "Invalid email address" });
+    }
+    if (!validatePassword(password)) {
+      return res
+        .status(400)
+        .json({
+          error:
+            "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character",
+        });
+    }
+    if (password !== confirmPassword) {
+      return res.status(400).json({ error: "Passwords do not match" });
+    }
+    if (phone && !validatePhone(phone)) {
+      return res
+        .status(400)
+        .json({ error: "Phone number must be exactly 10 digits" });
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    try {
+      // Check if email exists in admins or users table
+      const [adminEmail] = await pool.query(
+        "SELECT id FROM admins WHERE email = ?",
+        [email]
+      );
+      const [userEmail] = await pool.query(
+        "SELECT id FROM users WHERE email = ?",
+        [email]
+      );
+      if (adminEmail.length > 0 || userEmail.length > 0) {
+        return res.status(400).json({ error: "Email already exists" });
+      }
 
-    // Insert admin
-    const [result] = await pool.query(
-      "INSERT INTO admins (full_name, email, password, role, phone, bio, is_active) VALUES (?, ?, ?, 'Administrator', ?, ?, 1)",
-      [fullName, email, hashedPassword, phone || null, bio || null]
-    );
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
 
-    res.json({
-      user: {
-        id: result.insertId,
-        fullName,
-        email,
-        userType: "Administrator",
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      message: "Admin registered successfully",
-    });
-  } catch (err) {
-    console.error("Admin register error:", err);
-    res.status(500).json({ error: "Server error" });
+      // Insert admin
+      const [result] = await pool.query(
+        "INSERT INTO admins (full_name, email, password, role, phone, bio, is_active) VALUES (?, ?, ?, 'Administrator', ?, ?, 1)",
+        [fullName, email, hashedPassword, phone || null, bio || null]
+      );
+
+      res.json({
+        user: {
+          id: result.insertId,
+          fullName,
+          email,
+          userType: "Administrator",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        message: "Admin registered successfully",
+      });
+    } catch (err) {
+      console.error("Admin register error:", err);
+      res.status(500).json({ error: "Server error" });
+    }
   }
-});
+);
 
 // Customer/Vendor signup
-app.post("/api/adminuserpanel/signup", adminauthenticateToken, async (req, res) => {
-  const { userType, fullName, email, password, confirmPassword, companyName, taxId, phone, address, agreeTerms } = req.body;
+app.post(
+  "/api/adminuserpanel/signup",
+  adminauthenticateToken,
+  async (req, res) => {
+    const {
+      userType,
+      fullName,
+      email,
+      password,
+      confirmPassword,
+      companyName,
+      taxId,
+      phone,
+      address,
+      agreeTerms,
+    } = req.body;
 
-  // Validate input
-  if (!userType || !fullName || !email || !password || !confirmPassword || 
-      (userType === "vendor" && (!companyName || !taxId || !phone || !address))) {
-    return res.status(400).json({ error: "All required fields must be provided" });
-  }
-  if (!["customer", "vendor"].includes(userType)) {
-    return res.status(400).json({ error: "Invalid user type" });
-  }
-  if (!validateEmail(email)) {
-    return res.status(400).json({ error: "Invalid email address" });
-  }
-  if (!validatePassword(password)) {
-    return res.status(400).json({ error: "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character" });
-  }
-  if (password !== confirmPassword) {
-    return res.status(400).json({ error: "Passwords do not match" });
-  }
-  if (phone && !validatePhone(phone)) {
-    return res.status(400).json({ error: "Phone number must be exactly 10 digits" });
-  }
-
-  try {
-    // Check if email exists in users or admin table
-    const [userEmail] = await pool.query("SELECT id FROM users WHERE email = ?", [email]);
-   
-
-    if (userEmail.length > 0 ) {
-      return res.status(400).json({ error: "Email already exists" });
+    // Validate input
+    if (
+      !userType ||
+      !fullName ||
+      !email ||
+      !password ||
+      !confirmPassword ||
+      (userType === "vendor" && (!companyName || !taxId || !phone || !address))
+    ) {
+      return res
+        .status(400)
+        .json({ error: "All required fields must be provided" });
+    }
+    if (!["customer", "vendor"].includes(userType)) {
+      return res.status(400).json({ error: "Invalid user type" });
+    }
+    if (!validateEmail(email)) {
+      return res.status(400).json({ error: "Invalid email address" });
+    }
+    if (!validatePassword(password)) {
+      return res
+        .status(400)
+        .json({
+          error:
+            "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character",
+        });
+    }
+    if (password !== confirmPassword) {
+      return res.status(400).json({ error: "Passwords do not match" });
+    }
+    if (phone && !validatePhone(phone)) {
+      return res
+        .status(400)
+        .json({ error: "Phone number must be exactly 10 digits" });
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    try {
+      // Check if email exists in users or admin table
+      const [userEmail] = await pool.query(
+        "SELECT id FROM users WHERE email = ?",
+        [email]
+      );
 
-    // Insert user
-    const [result] = await pool.query(
-      `INSERT INTO users 
+      if (userEmail.length > 0) {
+        return res.status(400).json({ error: "Email already exists" });
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Insert user
+      const [result] = await pool.query(
+        `INSERT INTO users 
       (user_type, full_name, email, password, company_name, tax_id, phone, address, account_status, is_active, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Active', 1, NOW(), NOW())`,
-      [userType, fullName, email, hashedPassword, companyName || null, taxId || null, phone || null, address || null]
-    );
+        [
+          userType,
+          fullName,
+          email,
+          hashedPassword,
+          companyName || null,
+          taxId || null,
+          phone || null,
+          address || null,
+        ]
+      );
 
-    res.json({
-      user: {
-        id: result.insertId,
-        fullName,
-        email,
-        userType,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      message: `${userType.charAt(0).toUpperCase() + userType.slice(1)} registered successfully`,
-    });
-  } catch (err) {
-    console.error("Signup error:", err);
-    res.status(500).json({ error: "Server error" });
+      res.json({
+        user: {
+          id: result.insertId,
+          fullName,
+          email,
+          userType,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        message: `${
+          userType.charAt(0).toUpperCase() + userType.slice(1)
+        } registered successfully`,
+      });
+    } catch (err) {
+      console.error("Signup error:", err);
+      res.status(500).json({ error: "Server error" });
+    }
   }
-});
-
+);
 
 // Delete a user from users table
-app.delete("/api/adminuserpanel/users/:id", adminauthenticateToken, async (req, res) => {
-  const { id } = req.params;
-  console.log(`Attempting to delete user ID ${id} from users table`); // Debug log
+app.delete(
+  "/api/adminuserpanel/users/:id",
+  adminauthenticateToken,
+  async (req, res) => {
+    const { id } = req.params;
+    console.log(`Attempting to delete user ID ${id} from users table`); // Debug log
 
-  try {
-    const [result] = await pool.query("DELETE FROM users WHERE id = ?", [id]);
-    console.log(`Delete user result:`, result); // Debug log
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "User not found" });
+    try {
+      const [result] = await pool.query("DELETE FROM users WHERE id = ?", [id]);
+      console.log(`Delete user result:`, result); // Debug log
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json({ message: "User deleted successfully" });
+    } catch (err) {
+      console.error("Delete user error:", err);
+      res.status(500).json({ error: "Server error" });
     }
-    res.json({ message: "User deleted successfully" });
-  } catch (err) {
-    console.error("Delete user error:", err);
-    res.status(500).json({ error: "Server error" });
   }
-});
+);
 
 // Delete an admin from admin table
-app.delete("/api/adminuserpanel/admins/:id", adminauthenticateToken, async (req, res) => {
-  const { id } = req.params;
-  const adminId = req.admin.id; // From decoded token
-  console.log(`Attempting to delete admin ID ${id} by admin ID ${adminId}`); // Debug log
+app.delete(
+  "/api/adminuserpanel/admins/:id",
+  adminauthenticateToken,
+  async (req, res) => {
+    const { id } = req.params;
+    const adminId = req.admin.id; // From decoded token
+    console.log(`Attempting to delete admin ID ${id} by admin ID ${adminId}`); // Debug log
 
-  try {
-    // Prevent self-deletion
-    if (parseInt(id) === adminId) {
-      return res.status(403).json({ error: "Cannot delete your own account" });
-    }
+    try {
+      // Prevent self-deletion
+      if (parseInt(id) === adminId) {
+        return res
+          .status(403)
+          .json({ error: "Cannot delete your own account" });
+      }
 
-    const [result] = await pool.query("DELETE FROM admins WHERE id = ?", [id]);
-    console.log(`Delete admin result:`, result); // Debug log
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "Admin not found" });
+      const [result] = await pool.query("DELETE FROM admins WHERE id = ?", [
+        id,
+      ]);
+      console.log(`Delete admin result:`, result); // Debug log
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: "Admin not found" });
+      }
+      res.json({ message: "Admin deleted successfully" });
+    } catch (err) {
+      console.error("Delete admin error:", err);
+      res.status(500).json({ error: err.message || "Server error" });
     }
-    res.json({ message: "Admin deleted successfully" });
-  } catch (err) {
-    console.error("Delete admin error:", err);
-    res.status(500).json({ error: err.message || "Server error" });
   }
-});
+);
 
+app.get(
+  "/api/admin/vendorproducts",
+  adminauthenticateToken,
+  async (req, res) => {
+    try {
+      const { vendor_id } = req.query;
+      let query =
+        "SELECT product_id, vendor_id, name, category, sku, price, currency, in_stock, lead_time, image_url, description, created_at, updated_at FROM vendorproducts WHERE 1=1";
+      const params = [];
 
+      if (vendor_id) {
+        query += " AND vendor_id = ?";
+        params.push(vendor_id);
+      }
 
-
-
-
-
+      const [rows] = await pool.query(query, params);
+      res.json(rows);
+    } catch (err) {
+      console.error("Error fetching vendor products:", err);
+      res.status(500).json({ error: "Failed to fetch vendor products" });
+    }
+  }
+);
 
 //-----------------------------------------------------------------------VEndor API Endpoints-----------------------------------------------------------------------
 
-
 /////////////vendor////////////////////
 
-
-
 // Vendor Login API
-app.post('/api/vendor/login', async (req, res) => {
- const { email, password } = req.body;
- 
- // Validation
- if (!email || !password) {
- return res.status(400).json({ error: 'Email and password are required' });
- }
- if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
- return res.status(400).json({ error: 'Invalid email format' });
- }
- 
- try {
- // Fetch user with vendor type
- const [users] = await pool.query('SELECT * FROM users WHERE email = ? AND user_type = ?', [email, 'vendor']);
- 
- if (users.length === 0) {
- return res.status(401).json({ error: 'Invalid email or password' });
- }
- 
- const vendor = users[0];
- 
- // Check if vendor is active
- if (!vendor.is_active) {
- return res.status(403).json({ error: 'Account is inactive' });
- }
- if (!vendor.account_status || vendor.account_status !== 'Active') {
- return res.status(403).json({ error: 'Account is inactive' });
- }
- 
- // Check if user is a vendor
- if (vendor.user_type !== 'vendor') {
- return res.status(403).json({ error: 'Only vendors can log in' });
- }
- 
- // Verify password
- const isMatch = await bcrypt.compare(password, vendor.password);
- if (!isMatch) {
- return res.status(401).json({ error: 'Invalid email or password' });
- }
- 
- // Update last login
- await pool.query('UPDATE users SET last_login = NOW() WHERE id = ?', [vendor.id]);
- 
- // Create JWT with token_version
- const token = jwt.sign(
- { id: vendor.id, email: vendor.email, token_version: vendor.token_version },
- JWT_SECRET,
- { expiresIn: '1d' }
- );
- 
- // Respond with token and vendor details
- res.json({
- token,
- vendor: {
- id: vendor.id,
- email: vendor.email,
- full_name: vendor.full_name,
- user_type: vendor.user_type,
- },
- });
- } catch (err) {
- console.error('Login error:', err);
- res.status(500).json({ error: 'Server error' });
- }
-});
+app.post("/api/vendor/login", async (req, res) => {
+  const { email, password } = req.body;
 
+  // Validation
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password are required" });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: "Invalid email format" });
+  }
+
+  try {
+    // Fetch user with vendor type
+    const [users] = await pool.query(
+      "SELECT * FROM users WHERE email = ? AND user_type = ?",
+      [email, "vendor"]
+    );
+
+    if (users.length === 0) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    const vendor = users[0];
+
+    // Check if vendor is active
+    if (!vendor.is_active) {
+      return res.status(403).json({ error: "Account is inactive" });
+    }
+    if (!vendor.account_status || vendor.account_status !== "Active") {
+      return res.status(403).json({ error: "Account is inactive" });
+    }
+
+    // Check if user is a vendor
+    if (vendor.user_type !== "vendor") {
+      return res.status(403).json({ error: "Only vendors can log in" });
+    }
+
+    // Verify password
+    const isMatch = await bcrypt.compare(password, vendor.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    // Update last login
+    await pool.query("UPDATE users SET last_login = NOW() WHERE id = ?", [
+      vendor.id,
+    ]);
+
+    // Create JWT with token_version
+    const token = jwt.sign(
+      {
+        id: vendor.id,
+        email: vendor.email,
+        token_version: vendor.token_version,
+      },
+      JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    // Respond with token and vendor details
+    res.json({
+      token,
+      vendor: {
+        id: vendor.id,
+        email: vendor.email,
+        full_name: vendor.full_name,
+        user_type: vendor.user_type,
+      },
+    });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 // POST /api/vendor/logout
-app.post('/api/vendor/logout', authenticateToken, async (req, res) => {
- const userId = req.user.id;
- 
- try {
- // Verify user is a vendor
- const [users] = await pool.query('SELECT user_type, token_version FROM users WHERE id = ?', [userId]);
- if (users.length === 0 || users[0].user_type !== 'vendor') {
- console.log(`Logout attempt failed: User ID ${userId} is not a vendor`);
- return res.status(403).json({ error: 'Only vendors can log out from this endpoint' });
- }
- 
- // Increment token_version to invalidate existing tokens
- await pool.query('UPDATE users SET token_version = token_version + 1 WHERE id = ?', [userId]);
- console.log(`User ID ${userId} logged out, token_version incremented`);
- 
- // Add cache-control headers
- res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
- res.status(200).json({ message: 'Logged out successfully' });
- } catch (err) {
- console.error('Logout error:', err);
- res.status(500).json({ error: 'Server error' });
- }
-});
+app.post("/api/vendor/logout", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
 
+  try {
+    // Verify user is a vendor
+    const [users] = await pool.query(
+      "SELECT user_type, token_version FROM users WHERE id = ?",
+      [userId]
+    );
+    if (users.length === 0 || users[0].user_type !== "vendor") {
+      console.log(`Logout attempt failed: User ID ${userId} is not a vendor`);
+      return res
+        .status(403)
+        .json({ error: "Only vendors can log out from this endpoint" });
+    }
+
+    // Increment token_version to invalidate existing tokens
+    await pool.query(
+      "UPDATE users SET token_version = token_version + 1 WHERE id = ?",
+      [userId]
+    );
+    console.log(`User ID ${userId} logged out, token_version incremented`);
+
+    // Add cache-control headers
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.status(200).json({ message: "Logged out successfully" });
+  } catch (err) {
+    console.error("Logout error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 // Vendor Token Verification API
-app.get('/api/vendor/verify', authenticateToken, async (req, res) => {
- const userId = req.user.id;
- const tokenVersion = req.user.token_version;
- 
- try {
- const [users] = await pool.query('SELECT token_version, user_type FROM users WHERE id = ?', [userId]);
- if (users.length === 0 || users[0].user_type !== 'vendor') {
- return res.status(403).json({ error: 'Invalid user' });
- }
- if (users[0].token_version !== tokenVersion) {
- return res.status(401).json({ error: 'Token is invalid' });
- }
- res.status(200).json({ valid: true });
- } catch (err) {
- console.error('Token verification error:', err);
- res.status(500).json({ error: 'Server error' });
- }
+app.get("/api/vendor/verify", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+  const tokenVersion = req.user.token_version;
+
+  try {
+    const [users] = await pool.query(
+      "SELECT token_version, user_type FROM users WHERE id = ?",
+      [userId]
+    );
+    if (users.length === 0 || users[0].user_type !== "vendor") {
+      return res.status(403).json({ error: "Invalid user" });
+    }
+    if (users[0].token_version !== tokenVersion) {
+      return res.status(401).json({ error: "Token is invalid" });
+    }
+    res.status(200).json({ valid: true });
+  } catch (err) {
+    console.error("Token verification error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
 });
-
-
-
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`Server running on http://0.0.0.0:${port}`);
