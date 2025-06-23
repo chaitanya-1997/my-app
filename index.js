@@ -150,25 +150,26 @@ app.post("/api/signup", async (req, res) => {
 
   try {
     // Check if email already exists
-    // const [existingUsers] = await pool.query(
-    //   "SELECT id FROM users WHERE email = ?",
-    //   [email]
-    // );
-    // if (existingUsers.length > 0) {
-    //   return res.status(400).json({ error: "Email already exists" });
-    // }
-    // Check if email already exists for same userType
     const [existingUsers] = await pool.query(
-      "SELECT id FROM users WHERE email = ? AND user_type = ?",
-      [email, userType]
+      "SELECT id FROM users WHERE email = ?",
+      [email]
     );
     if (existingUsers.length > 0) {
-      return res
-        .status(400)
-        .json({
-          error: `An account with this email already exists as a ${userType}`,
-        });
+      return res.status(400).json({ error: "Email already exists" });
     }
+ 
+ // Check if email already exists for the same userType
+// const [existingUsers] = await pool.query(
+//   "SELECT id FROM users WHERE email = ? AND user_type = ?",
+//   [email, userType]
+// );
+
+// if (existingUsers.length > 0) {
+//   return res
+//     .status(400)
+//     .json({ error: `An account with this email already exists as a ${userType}.` });
+// }
+
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
@@ -4318,12 +4319,10 @@ app.post(
       return res.status(400).json({ error: "Invalid email address" });
     }
     if (!validatePassword(password)) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character",
-        });
+      return res.status(400).json({
+        error:
+          "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character",
+      });
     }
     if (password !== confirmPassword) {
       return res.status(400).json({ error: "Passwords do not match" });
@@ -4413,12 +4412,10 @@ app.post(
       return res.status(400).json({ error: "Invalid email address" });
     }
     if (!validatePassword(password)) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character",
-        });
+      return res.status(400).json({
+        error:
+          "Password must be at least 8 characters long and include uppercase, lowercase, number, and special character",
+      });
     }
     if (password !== confirmPassword) {
       return res.status(400).json({ error: "Passwords do not match" });
@@ -4557,6 +4554,101 @@ app.get(
     }
   }
 );
+
+// GET /api/items?sku=<sku>&item_type=<item_type>&color=<color>
+app.get("/api/admin/items", adminauthenticateToken, async (req, res) => {
+  try {
+    const { sku, item_type, color } = req.query;
+    let query = 'SELECT id, sku, description, item_type, search_description, unit_of_measure, price, weight, cube, cw, gr, se, sw, created_at, updated_at, color FROM items WHERE 1=1';
+    const params = [];
+
+    if (sku) {
+      query += ' AND sku LIKE ?';
+      params.push(`%${sku}%`);
+    }
+    if (item_type) {
+      query += ' AND item_type = ?';
+      params.push(item_type.toUpperCase());
+    }
+    if (color) {
+      query += ' AND color = ?';
+      params.push(color);
+    }
+
+    const [rows] = await pool.query(query, params);
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching items:', err);
+    res.status(500).json({ error: 'Failed to fetch items' });
+  }
+});
+
+// POST /api/admin/items
+app.post('/api/admin/items', adminauthenticateToken, async (req, res) => {
+  try {
+    const { sku, description, item_type, unit_of_measure, color, price, search_description, weight, cube, cw, gr, se, sw } = req.body;
+
+    if (!sku || !description || !item_type || !unit_of_measure || !color || price == null) {
+      return res.status(400).json({ error: 'Missing required fields: sku, description, item_type, unit_of_measure, color, price' });
+    }
+
+    const [result] = await pool.query(
+      'INSERT INTO items (sku, description, item_type, search_description, unit_of_measure, color, price, weight, cube, cw, gr, se, sw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [sku, description, item_type.toUpperCase(), search_description || null, unit_of_measure, color, price, weight || null, cube || null, cw || null, gr || null, se || null, sw || null]
+    );
+
+    const [newItem] = await pool.query('SELECT * FROM items WHERE id = ?', [result.insertId]);
+    res.status(201).json(newItem[0]);
+  } catch (err) {
+    console.error('Error creating item:', err);
+    res.status(500).json({ error: 'Failed to create item' });
+  }
+});
+
+// PUT /api/items/:id
+app.put('/api/admin/items/:id', adminauthenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { sku, description, item_type, unit_of_measure, color, price } = req.body;
+
+    if (!sku || !description || !item_type || !unit_of_measure || !color || price == null) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const [result] = await pool.query(
+      'UPDATE items SET sku = ?, description = ?, item_type = ?, unit_of_measure = ?, color = ?, price = ?, updated_at = NOW() WHERE id = ?',
+      [sku, description, item_type.toUpperCase(), unit_of_measure, color, price, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    res.json({ message: 'Item updated successfully' });
+  } catch (err) {
+    console.error('Error updating item:', err);
+    res.status(500).json({ error: 'Failed to update item' });
+  }
+});
+
+// DELETE /api/items/:id
+app.delete('/api/admin/items/:id', adminauthenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [result] = await pool.query('DELETE FROM items WHERE id = ?', [id]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    res.json({ message: 'Item deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting item:', err);
+    res.status(500).json({ error: 'Failed to delete item' });
+  }
+});
+
+
 
 //-----------------------------------------------------------------------VEndor API Endpoints-----------------------------------------------------------------------
 
