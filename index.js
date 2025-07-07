@@ -4733,6 +4733,31 @@ app.delete(
   }
 );
 
+// app.get("/api/admin/vendorproducts",adminauthenticateToken,
+//   async (req, res) => {
+//     try {
+//       const { vendor_id } = req.query;
+//       let query =
+//         "SELECT product_id, vendor_id, name, category, sku, price, currency, in_stock, lead_time, image_url, description, created_at, updated_at FROM vendorproducts WHERE 1=1";
+//       const params = [];
+
+//       if (vendor_id) {
+//         query += " AND vendor_id = ?";
+//         params.push(vendor_id);
+//       }
+
+//       const [rows] = await pool.query(query, params);
+//       res.json(rows);
+//     } catch (err) {
+//       console.error("Error fetching vendor products:", err);
+//       res.status(500).json({ error: "Failed to fetch vendor products" });
+//     }
+//   }
+// );
+
+// GET /api/items?sku=<sku>&item_type=<item_type>&color=<color>
+
+
 app.get(
   "/api/admin/vendorproducts",
   adminauthenticateToken,
@@ -4749,7 +4774,16 @@ app.get(
       }
 
       const [rows] = await pool.query(query, params);
-      res.json(rows);
+
+      // Transform image_url to absolute URLs
+      const updatedRows = rows.map((product) => ({
+        ...product,
+        image_url: product.image_url?.startsWith("http")
+          ? product.image_url
+          : `${req.protocol}://${req.get("host")}${product.image_url}`,
+      }));
+
+      res.json(updatedRows);
     } catch (err) {
       console.error("Error fetching vendor products:", err);
       res.status(500).json({ error: "Failed to fetch vendor products" });
@@ -4757,7 +4791,7 @@ app.get(
   }
 );
 
-// GET /api/items?sku=<sku>&item_type=<item_type>&color=<color>
+
 app.get("/api/admin/items", adminauthenticateToken, async (req, res) => {
   try {
     const { sku, item_type, color } = req.query;
