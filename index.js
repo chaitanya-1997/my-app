@@ -18,7 +18,13 @@ const SALT_ROUNDS = 10;
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = "1h";
 
-app.use(cors({ origin: "*" })); // Allow all origins for testing
+// app.use(cors({ origin: "*" })); // Allow all origins for testing
+
+app.use(cors({
+ origin: "*",
+ exposedHeaders: ['Content-Disposition']
+}));
+
 app.use(express.json());
 
 const authenticateToken = (req, res, next) => {
@@ -76,6 +82,7 @@ app.use(
   "/uploads",
   express.static(path.join(__dirname, "../../public_html/uploads"))
 );
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Multer storage configuration
 const storage = multer.diskStorage({
@@ -2801,9 +2808,7 @@ app.put("/api/admin/vendor/:id", adminauthenticateToken, async (req, res) => {
   }
 });
 
-app.put(
-  "/api/admin/vendor/:id/status",
-  adminauthenticateToken,
+app.put("/api/admin/vendor/:id/status",adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
@@ -2924,9 +2929,7 @@ app.put(
 //   }
 // );
 
-app.put(
-  "/api/admin/user/:id/discount",
-  adminauthenticateToken,
+app.put("/api/admin/user/:id/discount",adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { admin_discount, notes } = req.body;
@@ -2972,9 +2975,7 @@ app.put(
 
 // Update User Status
 
-app.put(
-  "/api/admin/user/:id/status",
-  adminauthenticateToken,
+app.put("/api/admin/user/:id/status",adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
@@ -3379,9 +3380,7 @@ app.post("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
 });
 
 // PUT /api/admin/orders/:id/shipping (fallback)
-app.put(
-  "/api/admin/orders/:id/shipping",
-  adminauthenticateToken,
+app.put("/api/admin/orders/:id/shipping",adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { shipping, additional_discount } = req.body;
@@ -3535,9 +3534,7 @@ app.put(
   }
 );
 
-app.put(
-  "/api/admin/orders/:id/status",
-  adminauthenticateToken,
+app.put("/api/admin/orders/:id/status",adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
@@ -4026,9 +4023,7 @@ cron.schedule("* * * * *", async () => {
   }
 });
 
-app.delete(
-  "/api/admin/orders/:id",
-  adminauthenticateToken,
+app.delete("/api/admin/orders/:id",adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
 
@@ -4053,9 +4048,7 @@ app.delete(
 );
 
 // GET /api/contact/messages
-app.get(
-  "/api/admin/contact/messages",
-  adminauthenticateToken,
+app.get( "/api/admin/contact/messages",adminauthenticateToken,
   async (req, res) => {
     try {
       const query = `
@@ -4073,8 +4066,7 @@ app.get(
 );
 
 // Upload media
-app.post(
-  "/api/admin/elearning/upload",
+app.post("/api/admin/elearning/upload",
   adminauthenticateToken,
   upload.single("media"),
   async (req, res) => {
@@ -6391,7 +6383,6 @@ app.post(
     }
   }
 );
-
 const { promisify } = require("util");
 
 const AdmZip = require("adm-zip");
