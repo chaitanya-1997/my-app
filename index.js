@@ -20,10 +20,12 @@ const JWT_EXPIRES_IN = "1h";
 
 // app.use(cors({ origin: "*" })); // Allow all origins for testing
 
-app.use(cors({
- origin: "*",
- exposedHeaders: ['Content-Disposition']
-}));
+app.use(
+  cors({
+    origin: "*",
+    exposedHeaders: ["Content-Disposition"],
+  })
+);
 
 app.use(express.json());
 
@@ -82,7 +84,7 @@ app.use(
   "/uploads",
   express.static(path.join(__dirname, "../../public_html/uploads"))
 );
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Multer storage configuration
 const storage = multer.diskStorage({
@@ -687,6 +689,606 @@ app.get("/api/orders/next-id", async (req, res) => {
   }
 });
 
+// app.post("/api/orders", authenticateToken, async (req, res) => {
+//   const {
+//     doorStyle,
+//     finishType,
+//     stainOption,
+//     paintOption,
+//     account,
+//     billTo,
+//     items,
+//     subtotal,
+//     tax,
+//     shipping,
+//     total,
+//     discount,
+//   } = req.body;
+
+//   try {
+//     // Validations (same as your original)
+//     if (!items || !Array.isArray(items) || items.length === 0) {
+//       return res
+//         .status(400)
+//         .json({ error: "Items are required and must be a non-empty array" });
+//     }
+//     if (!subtotal || !tax || !total) {
+//       return res
+//         .status(400)
+//         .json({ error: "Subtotal, tax, and total are required" });
+//     }
+//     if (!doorStyle || !finishType || !account || !billTo) {
+//       return res.status(400).json({
+//         error: "Door style, finish type, account, and bill-to are required",
+//       });
+//     }
+//     if (finishType === "Stain" && !stainOption) {
+//       return res
+//         .status(400)
+//         .json({ error: "Stain option is required for stain finish" });
+//     }
+//     if (finishType === "Paint" && !paintOption) {
+//       return res
+//         .status(400)
+//         .json({ error: "Paint option is required for paint finish" });
+//     }
+
+//     const userId = req.user.id;
+
+//     // Get user info
+//     const [userResult] = await pool.query(
+//       "SELECT full_name, email, phone, admin_discount FROM users WHERE id = ?",
+//       [userId]
+//     );
+//     if (userResult.length === 0) {
+//       return res.status(404).json({ error: "User not found" });
+//     }
+
+//     const userFullName = userResult[0].full_name;
+//     const userEmail = userResult[0].email;
+//     const userPhone = userResult[0].phone || "N/A";
+//     const adminDiscount = parseFloat(userResult[0].admin_discount) || 0;
+
+//     // Validate discount
+//     const expectedDiscount = parseFloat((subtotal * adminDiscount).toFixed(2));
+//     if (
+//       discount === undefined ||
+//       parseFloat(discount.toFixed(2)) !== expectedDiscount
+//     ) {
+//       return res.status(400).json({
+//         error: `Invalid discount amount. Expected: ${expectedDiscount}, Received: ${discount}`,
+//       });
+//     }
+
+//     const connection = await pool.getConnection();
+//     await connection.beginTransaction();
+
+//     try {
+//       // Insert order (without order_id)
+//       const [orderResult] = await connection.query(
+//         `INSERT INTO orders (
+//           user_id, door_style, finish_type, stain_option, paint_option,
+//           account, bill_to, subtotal, tax, shipping, discount, total, status, created_at
+//         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', NOW())`,
+//         [
+//           userId,
+//           doorStyle,
+//           finishType,
+//           stainOption || null,
+//           paintOption || null,
+//           account,
+//           billTo,
+//           subtotal,
+//           tax,
+//           shipping !== undefined ? shipping : null,
+//           discount || 0,
+//           total,
+//         ]
+//       );
+
+//       const autoId = orderResult.insertId;
+
+//       // Generate order_id
+//       const orderId = `S-ORD${String(autoId + 101001).padStart(6, "0")}`;
+
+//       // Update order_id
+//       await connection.query(`UPDATE orders SET order_id = ? WHERE id = ?`, [
+//         orderId,
+//         autoId,
+//       ]);
+
+//       // Insert order items
+//       for (const item of items) {
+//         if (!item.sku || !item.name || !item.quantity || item.quantity < 1) {
+//           throw new Error(
+//             "Invalid item data: SKU, name, and valid quantity are required"
+//           );
+//         }
+
+//         await connection.query(
+//           `INSERT INTO order_items (order_id, sku, name, quantity, price, total_amount, door_style, finish)
+//            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+//           [
+//             autoId,
+//             item.sku,
+//             item.name,
+//             item.quantity,
+//             item.price || null,
+//             item.totalAmount || null,
+//             doorStyle,
+//             finishType,
+//             // finishType === "Stain" ? stainOption : paintOption,
+//           ]
+//         );
+//       }
+
+//       await connection.commit();
+//       connection.release();
+
+//       // === Email template with detailed order info ===
+//       const orderDetailsHtml = `
+//         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//           <h3>Order Details</h3>
+//           <ul style="list-style: none; padding: 0;">
+//             <li><strong>Door Style:</strong> ${doorStyle}</li>
+//             <li><strong>Finish Type:</strong> ${finishType}</li>
+//             ${
+//               stainOption
+//                 ? `<li><strong>Stain Option:</strong> ${stainOption}</li>`
+//                 : ""
+//             }
+//             ${
+//               paintOption
+//                 ? `<li><strong>Paint Option:</strong> ${paintOption}</li>`
+//                 : ""
+//             }
+//             <li><strong>Ship To:</strong> ${account}</li>
+//             <li><strong>Bill To:</strong> ${billTo}</li>
+//           </ul>
+//           <h3>Items</h3>
+//           <table style="border-collapse: collapse; width: 100%;">
+//             <thead>
+//               <tr style="background-color: #f2f2f2;">
+//                 <th style="border: 1px solid #ddd; padding: 8px;">SKU</th>
+//                 <th style="border: 1px solid #ddd; padding: 8px;">Name</th>
+//                 <th style="border: 1px solid #ddd; padding: 8px;">Quantity</th>
+//                 <th style="border: 1px solid #ddd; padding: 8px;">Price ($)</th>
+//                 <th style="border: 1px solid #ddd; padding: 8px;">Total ($)</th>
+//               </tr>
+//             </thead>
+//             <tbody>
+//               ${items
+//                 .map(
+//                   (item) => `
+//                 <tr>
+//                   <td style="border: 1px solid #ddd; padding: 8px;">${
+//                     item.sku
+//                   }</td>
+//                   <td style="border: 1px solid #ddd; padding: 8px;">${
+//                     item.name
+//                   }</td>
+//                   <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${
+//                     item.quantity
+//                   }</td>
+//                   <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${parseFloat(
+//                     item.price || 0
+//                   ).toFixed(2)}</td>
+//                   <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${parseFloat(
+//                     item.totalAmount || 0
+//                   ).toFixed(2)}</td>
+//                 </tr>
+//               `
+//                 )
+//                 .join("")}
+//             </tbody>
+//           </table>
+//           <h3>Price Summary</h3>
+//           <ul style="list-style: none; padding: 0;">
+//             <li><strong>Subtotal:</strong> $${parseFloat(subtotal).toFixed(
+//               2
+//             )}</li>
+//             ${
+//               discount > 0
+//                 ? `<li><strong>Discount:</strong> $${parseFloat(
+//                     discount
+//                   ).toFixed(2)}</li>`
+//                 : ""
+//             }
+//             <li><strong>Tax (7%):</strong> $${parseFloat(tax).toFixed(2)}</li>
+//             <li><strong>Shipping:</strong> ${
+//               shipping !== null ? `$${parseFloat(shipping).toFixed(2)}` : "-"
+//             }</li>
+//             <li><strong>Total:</strong> $${parseFloat(total).toFixed(2)}</li>
+//           </ul>
+//         </div>
+//       `;
+
+//       // Updated mail options with full HTML details
+//       const userMailOptions = {
+//         from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//         to: userEmail,
+//         subject: `Order Submitted - ${orderId} (Pending Approval)`,
+//         html: `
+//           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//             <h2>Thank You for Your Order, ${userFullName}!</h2>
+//             <p>Your order <strong>${orderId}</strong> has been submitted on ${new Date().toLocaleDateString()} and is currently <strong>pending admin approval</strong>.</p>
+//             <p><strong>Important:</strong></p>
+//             <ul>
+//               <li>This order cannot be edited or canceled after 24 hours.</li>
+//               <li>Please note: Your order will be considered accepted after 24 hours of placement.</li>
+//               <li>Shipping charges will be applied by the admin based on your location's shipping zone. You'll receive an updated order amount via email once finalized.</li>
+//             </ul>
+//             ${orderDetailsHtml}
+//           </div>
+//         `,
+//       };
+
+//       const adminMailOptions = {
+//         from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//         to: "aashish.shroff@zeta-v.com",
+//         subject: `New Order Pending Approval - ${orderId}`,
+//         html: `
+//           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//             <h2>New Order Pending Approval: ${orderId}</h2>
+//             <p>A new order has been submitted by <strong>${userFullName}</strong> (${userEmail}) on ${new Date().toLocaleDateString()}.</p>
+//             <p><strong>Phone:</strong> ${userPhone}</p>
+//             ${orderDetailsHtml}
+//           </div>
+//         `,
+//       };
+
+//       try {
+//         await Promise.all([
+//           transporter.sendMail(userMailOptions),
+//           transporter.sendMail(adminMailOptions),
+//         ]);
+//       } catch (emailErr) {
+//         console.error("Email sending failed:", emailErr);
+//       }
+
+//       res.status(201).json({
+//         message: "Order submitted successfully and is pending admin approval",
+//         order_id: orderId,
+//       });
+//     } catch (err) {
+//       await connection.rollback();
+//       connection.release();
+//       console.error("Transaction failed:", err);
+//       res.status(500).json({ error: "Error placing order" });
+//     }
+//   } catch (err) {
+//     console.error("Server error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+
+
+
+// app.post("/api/orders", authenticateToken, async (req, res) => {
+//   const {
+//     doorStyle,
+//     finishType,
+//     stainOption,
+//     paintOption,
+//     account,
+//     billTo,
+//     items,
+//     designServicesPrice,
+//     assemblyFlag,
+//     subtotal,
+//     tax,
+//     shipping,
+//     total,
+//     discount,
+//   } = req.body;
+
+//   try {
+//     // Validations
+//     if (!items || !Array.isArray(items) || items.length === 0) {
+//       return res
+//         .status(400)
+//         .json({ error: "Items are required and must be a non-empty array" });
+//     }
+//     if (!subtotal || !tax || !total) {
+//       return res
+//         .status(400)
+//         .json({ error: "Subtotal, tax, and total are required" });
+//     }
+//     if (!doorStyle || !finishType || !account || !billTo) {
+//       return res.status(400).json({
+//         error: "Door style, finish type, account, and bill-to are required",
+//       });
+//     }
+//     if (finishType === "Stained" && !stainOption) {
+//       return res
+//         .status(400)
+//         .json({ error: "Stain option is required for stained finish" });
+//     }
+//     if (finishType === "Painted" && !paintOption) {
+//       return res
+//         .status(400)
+//         .json({ error: "Paint option is required for painted finish" });
+//     }
+//     if (designServicesPrice < 0) {
+//       return res
+//         .status(400)
+//         .json({ error: "Design services price cannot be negative" });
+//     }
+//     if (!["Included", "Not Included"].includes(assemblyFlag)) {
+//       return res
+//         .status(400)
+//         .json({ error: "Assembly flag must be 'Included' or 'Not Included'" });
+//     }
+
+//     const userId = req.user.id;
+
+//     // Get user info
+//     const [userResult] = await pool.query(
+//       "SELECT full_name, email, phone, admin_discount FROM users WHERE id = ?",
+//       [userId]
+//     );
+//     if (userResult.length === 0) {
+//       return res.status(404).json({ error: "User not found" });
+//     }
+
+//     const userFullName = userResult[0].full_name;
+//     const userEmail = userResult[0].email;
+//     const userPhone = userResult[0].phone || "N/A";
+//     const adminDiscount = parseFloat(userResult[0].admin_discount) || 0;
+
+//     // Calculate expected subtotal
+//     const itemsSubtotal = items.reduce(
+//       (sum, item) => sum + parseFloat(item.totalAmount || 0),
+//       0
+//     );
+//     const expectedSubtotal = parseFloat(
+//       (itemsSubtotal + designServicesPrice).toFixed(2)
+//     );
+//     if (parseFloat(subtotal.toFixed(2)) !== expectedSubtotal) {
+//       return res.status(400).json({
+//         error: `Invalid subtotal. Expected: ${expectedSubtotal}, Received: ${subtotal}`,
+//       });
+//     }
+
+//     // Validate discount
+//     const expectedDiscount = parseFloat((subtotal * adminDiscount).toFixed(2));
+//     if (
+//       discount === undefined ||
+//       parseFloat(discount.toFixed(2)) !== expectedDiscount
+//     ) {
+//       return res.status(400).json({
+//         error: `Invalid discount amount. Expected: ${expectedDiscount}, Received: ${discount}`,
+//       });
+//     }
+
+//     // Validate total
+//     const expectedTax = parseFloat((subtotal * 0.07).toFixed(2));
+//     const expectedTotal = parseFloat(
+//       (subtotal - expectedDiscount + expectedTax).toFixed(2)
+//     );
+//     if (parseFloat(total.toFixed(2)) !== expectedTotal) {
+//       return res.status(400).json({
+//         error: `Invalid total amount. Expected: ${expectedTotal}, Received: ${total}`,
+//       });
+//     }
+
+//     const connection = await pool.getConnection();
+//     await connection.beginTransaction();
+
+//     try {
+//       // Insert order with design_services_price and assembly_flag
+//       const [orderResult] = await connection.query(
+//         `INSERT INTO orders (
+//           user_id, door_style, finish_type, stain_option, paint_option, 
+//           account, bill_to, design_services_price, assembly_flag, 
+//           subtotal, tax, shipping, discount, total, status, created_at
+//         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', NOW())`,
+//         [
+//           userId,
+//           doorStyle,
+//           finishType,
+//           stainOption || null,
+//           paintOption || null,
+//           account,
+//           billTo,
+//           designServicesPrice || 0,
+//           assemblyFlag,
+//           subtotal,
+//           tax,
+//           shipping !== undefined ? shipping : null,
+//           discount || 0,
+//           total,
+//         ]
+//       );
+
+//       const autoId = orderResult.insertId;
+
+//       // Generate order_id
+//       const orderId = `S-ORD${String(autoId + 101001).padStart(6, "0")}`;
+
+//       // Update order_id
+//       await connection.query(`UPDATE orders SET order_id = ? WHERE id = ?`, [
+//         orderId,
+//         autoId,
+//       ]);
+
+//       // Insert order items
+//       for (const item of items) {
+//         if (!item.sku || !item.name || !item.quantity || item.quantity < 1) {
+//           throw new Error(
+//             "Invalid item data: SKU, name, and valid quantity are required"
+//           );
+//         }
+
+//         await connection.query(
+//           `INSERT INTO order_items (order_id, sku, name, quantity, price, total_amount, door_style, finish)
+//            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+//           [
+//             autoId,
+//             item.sku,
+//             item.name,
+//             item.quantity,
+//             item.price || null,
+//             item.totalAmount || null,
+//             doorStyle,
+//             finishType,
+//           ]
+//         );
+//       }
+
+//       await connection.commit();
+//       connection.release();
+
+//       // Email template with services
+//       const orderDetailsHtml = `
+//         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//           <h3>Order Details</h3>
+//           <ul style="list-style: none; padding: 0;">
+//             <li><strong>Door Style:</strong> ${doorStyle}</li>
+//             <li><strong>Finish Type:</strong> ${finishType}</li>
+//             ${
+//               stainOption
+//                 ? `<li><strong>Stain Option:</strong> ${stainOption}</li>`
+//                 : ""
+//             }
+//             ${
+//               paintOption
+//                 ? `<li><strong>Paint Option:</strong> ${paintOption}</li>`
+//                 : ""
+//             }
+//             <li><strong>Ship To:</strong> ${account}</li>
+//             <li><strong>Bill To:</strong> ${billTo}</li>
+//             ${
+//               designServicesPrice > 0
+//                 ? `<li><strong>Design Services:</strong> $${parseFloat(
+//                     designServicesPrice
+//                   ).toFixed(2)}</li>`
+//                 : ""
+//             }
+//             ${
+//               assemblyFlag === "Included"
+//                 ? `<li><strong>Assembly Services:</strong> Included</li>`
+//                 : ""
+//             }
+//           </ul>
+//           <h3>Items</h3>
+//           <table style="border-collapse: collapse; width: 100%;">
+//             <thead>
+//               <tr style="background-color: #f2f2f2;">
+//                 <th style="border: 1px solid #ddd; padding: 8px;">SKU</th>
+//                 <th style="border: 1px solid #ddd; padding: 8px;">Name</th>
+//                 <th style="border: 1px solid #ddd; padding: 8px;">Quantity</th>
+//                 <th style="border: 1px solid #ddd; padding: 8px;">Price ($)</th>
+//                 <th style="border: 1px solid #ddd; padding: 8px;">Total ($)</th>
+//               </tr>
+//             </thead>
+//             <tbody>
+//               ${items
+//                 .map(
+//                   (item) => `
+//                 <tr>
+//                   <td style="border: 1px solid #ddd; padding: 8px;">${
+//                     item.sku
+//                   }</td>
+//                   <td style="border: 1px solid #ddd; padding: 8px;">${
+//                     item.name
+//                   }</td>
+//                   <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${
+//                     item.quantity
+//                   }</td>
+//                   <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${parseFloat(
+//                     item.price || 0
+//                   ).toFixed(2)}</td>
+//                   <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${parseFloat(
+//                     item.totalAmount || 0
+//                   ).toFixed(2)}</td>
+//                 </tr>
+//               `
+//                 )
+//                 .join("")}
+//             </tbody>
+//           </table>
+//           <h3>Price Summary</h3>
+//           <ul style="list-style: none; padding: 0;">
+//             <li><strong>Subtotal:</strong> $${parseFloat(subtotal).toFixed(
+//               2
+//             )}</li>
+//             ${
+//               discount > 0
+//                 ? `<li><strong>Discount:</strong> $${parseFloat(
+//                     discount
+//                   ).toFixed(2)}</li>`
+//                 : ""
+//             }
+//             <li><strong>Tax (7%):</strong> $${parseFloat(tax).toFixed(2)}</li>
+//             <li><strong>Shipping:</strong> ${
+//               shipping !== null ? `$${parseFloat(shipping).toFixed(2)}` : "-"
+//             }</li>
+//             <li><strong>Total:</strong> $${parseFloat(total).toFixed(2)}</li>
+//           </ul>
+//         </div>
+//       `;
+
+//       const userMailOptions = {
+//         from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//         to: userEmail,
+//         subject: `Order Submitted - ${orderId} (Pending Approval)`,
+//         html: `
+//           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//             <h2>Thank You for Your Order, ${userFullName}!</h2>
+//             <p>Your order <strong>${orderId}</strong> has been submitted on ${new Date().toLocaleDateString()} and is currently <strong>pending admin approval</strong>.</p>
+//             <p><strong>Important:</strong></p>
+//             <ul>
+//               <li>This order cannot be edited or canceled after 24 hours.</li>
+//               <li>Please note: Your order will be considered accepted after 24 hours of placement.</li>
+//               <li>Shipping charges will be applied by the admin based on your location's shipping zone. You'll receive an updated order amount via email once finalized.</li>
+//             </ul>
+//             ${orderDetailsHtml}
+//           </div>
+//         `,
+//       };
+
+//       const adminMailOptions = {
+//         from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//         to: "aashish.shroff@zeta-v.com",
+//         subject: `New Order Pending Approval - ${orderId}`,
+//         html: `
+//           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//             <h2>New Order Pending Approval: ${orderId}</h2>
+//             <p>A new order has been submitted by <strong>${userFullName}</strong> (${userEmail}) on ${new Date().toLocaleDateString()}.</p>
+//             <p><strong>Phone:</strong> ${userPhone}</p>
+//             ${orderDetailsHtml}
+//           </div>
+//         `,
+//       };
+
+//       try {
+//         await Promise.all([
+//           transporter.sendMail(userMailOptions),
+//           transporter.sendMail(adminMailOptions),
+//         ]);
+//       } catch (emailErr) {
+//         console.error("Email sending failed:", emailErr);
+//       }
+
+//       res.status(201).json({
+//         message: "Order submitted successfully and is pending admin approval",
+//         order_id: orderId,
+//       });
+//     } catch (err) {
+//       await connection.rollback();
+//       connection.release();
+//       console.error("Transaction failed:", err);
+//       res.status(500).json({ error: "Error placing order" });
+//     }
+//   } catch (err) {
+//     console.error("Server error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+
 app.post("/api/orders", authenticateToken, async (req, res) => {
   const {
     doorStyle,
@@ -696,6 +1298,8 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
     account,
     billTo,
     items,
+    designServicesPrice,
+    assemblyFlag,
     subtotal,
     tax,
     shipping,
@@ -703,8 +1307,10 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
     discount,
   } = req.body;
 
+  let connection;
+
   try {
-    // Validations (same as your original)
+    // Validations
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res
         .status(400)
@@ -720,15 +1326,25 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
         error: "Door style, finish type, account, and bill-to are required",
       });
     }
-    if (finishType === "Stain" && !stainOption) {
+    if (finishType === "Stained" && !stainOption) {
       return res
         .status(400)
-        .json({ error: "Stain option is required for stain finish" });
+        .json({ error: "Stain option is required for stained finish" });
     }
-    if (finishType === "Paint" && !paintOption) {
+    if (finishType === "Painted" && !paintOption) {
       return res
         .status(400)
-        .json({ error: "Paint option is required for paint finish" });
+        .json({ error: "Paint option is required for painted finish" });
+    }
+    if (designServicesPrice < 0) {
+      return res
+        .status(400)
+        .json({ error: "Design services price cannot be negative" });
+    }
+    if (!["Included", "Not Included"].includes(assemblyFlag)) {
+      return res
+        .status(400)
+        .json({ error: "Assembly flag must be 'Included' or 'Not Included'" });
     }
 
     const userId = req.user.id;
@@ -747,6 +1363,20 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
     const userPhone = userResult[0].phone || "N/A";
     const adminDiscount = parseFloat(userResult[0].admin_discount) || 0;
 
+    // Calculate expected subtotal
+    const itemsSubtotal = items.reduce(
+      (sum, item) => sum + parseFloat(item.totalAmount || 0),
+      0
+    );
+    const expectedSubtotal = parseFloat(
+      (itemsSubtotal + designServicesPrice).toFixed(2)
+    );
+    if (parseFloat(subtotal.toFixed(2)) !== expectedSubtotal) {
+      return res.status(400).json({
+        error: `Invalid subtotal. Expected: ${expectedSubtotal}, Received: ${subtotal}`,
+      });
+    }
+
     // Validate discount
     const expectedDiscount = parseFloat((subtotal * adminDiscount).toFixed(2));
     if (
@@ -758,207 +1388,262 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
       });
     }
 
-    const connection = await pool.getConnection();
+    // Validate total
+    const expectedTax = parseFloat((subtotal * 0.07).toFixed(2));
+    const expectedTotal = parseFloat(
+      (subtotal - expectedDiscount + expectedTax).toFixed(2)
+    );
+    if (parseFloat(total.toFixed(2)) !== expectedTotal) {
+      return res.status(400).json({
+        error: `Invalid total amount. Expected: ${expectedTotal}, Received: ${total}`,
+      });
+    }
+
+    // Start transaction
+    connection = await pool.getConnection();
     await connection.beginTransaction();
 
-    try {
-      // Insert order (without order_id)
-      const [orderResult] = await connection.query(
-        `INSERT INTO orders (
-          user_id, door_style, finish_type, stain_option, paint_option, 
-          account, bill_to, subtotal, tax, shipping, discount, total, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', NOW())`,
-        [
-          userId,
-          doorStyle,
-          finishType,
-          stainOption || null,
-          paintOption || null,
-          account,
-          billTo,
-          subtotal,
-          tax,
-          shipping !== undefined ? shipping : null,
-          discount || 0,
-          total,
-        ]
-      );
-
-      const autoId = orderResult.insertId;
-
-      // Generate order_id
-      const orderId = `S-ORD${String(autoId + 101001).padStart(6, "0")}`;
-
-      // Update order_id
-      await connection.query(`UPDATE orders SET order_id = ? WHERE id = ?`, [
-        orderId,
-        autoId,
-      ]);
-
-      // Insert order items
-      for (const item of items) {
-        if (!item.sku || !item.name || !item.quantity || item.quantity < 1) {
-          throw new Error(
-            "Invalid item data: SKU, name, and valid quantity are required"
-          );
-        }
-
-        await connection.query(
-          `INSERT INTO order_items (order_id, sku, name, quantity, price, total_amount, door_style, finish)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            autoId,
-            item.sku,
-            item.name,
-            item.quantity,
-            item.price || null,
-            item.totalAmount || null,
-            doorStyle,
-            finishType,
-            // finishType === "Stain" ? stainOption : paintOption,
-          ]
+    // Validate inventory for each item
+    for (const item of items) {
+      if (!item.sku || !item.name || !item.quantity || item.quantity < 1) {
+        throw new Error(
+          "Invalid item data: SKU, name, and valid quantity are required"
         );
       }
 
-      await connection.commit();
-      connection.release();
+      // Check available quantity in items table
+      const [itemResult] = await connection.query(
+        "SELECT qty FROM items WHERE sku = ?",
+        [item.sku]
+      );
 
-      // === Email template with detailed order info ===
-      const orderDetailsHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h3>Order Details</h3>
-          <ul style="list-style: none; padding: 0;">
-            <li><strong>Door Style:</strong> ${doorStyle}</li>
-            <li><strong>Finish Type:</strong> ${finishType}</li>
-            ${
-              stainOption
-                ? `<li><strong>Stain Option:</strong> ${stainOption}</li>`
-                : ""
-            }
-            ${
-              paintOption
-                ? `<li><strong>Paint Option:</strong> ${paintOption}</li>`
-                : ""
-            }
-            <li><strong>Ship To:</strong> ${account}</li>
-            <li><strong>Bill To:</strong> ${billTo}</li>
-          </ul>
-          <h3>Items</h3>
-          <table style="border-collapse: collapse; width: 100%;">
-            <thead>
-              <tr style="background-color: #f2f2f2;">
-                <th style="border: 1px solid #ddd; padding: 8px;">SKU</th>
-                <th style="border: 1px solid #ddd; padding: 8px;">Name</th>
-                <th style="border: 1px solid #ddd; padding: 8px;">Quantity</th>
-                <th style="border: 1px solid #ddd; padding: 8px;">Price ($)</th>
-                <th style="border: 1px solid #ddd; padding: 8px;">Total ($)</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${items
-                .map(
-                  (item) => `
-                <tr>
-                  <td style="border: 1px solid #ddd; padding: 8px;">${
-                    item.sku
-                  }</td>
-                  <td style="border: 1px solid #ddd; padding: 8px;">${
-                    item.name
-                  }</td>
-                  <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${
-                    item.quantity
-                  }</td>
-                  <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${parseFloat(
-                    item.price || 0
-                  ).toFixed(2)}</td>
-                  <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${parseFloat(
-                    item.totalAmount || 0
-                  ).toFixed(2)}</td>
-                </tr>
-              `
-                )
-                .join("")}
-            </tbody>
-          </table>
-          <h3>Price Summary</h3>
-          <ul style="list-style: none; padding: 0;">
-            <li><strong>Subtotal:</strong> $${parseFloat(subtotal).toFixed(
-              2
-            )}</li>
-            ${
-              discount > 0
-                ? `<li><strong>Discount:</strong> $${parseFloat(
-                    discount
-                  ).toFixed(2)}</li>`
-                : ""
-            }
-            <li><strong>Tax (7%):</strong> $${parseFloat(tax).toFixed(2)}</li>
-            <li><strong>Shipping:</strong> ${
-              shipping !== null ? `$${parseFloat(shipping).toFixed(2)}` : "-"
-            }</li>
-            <li><strong>Total:</strong> $${parseFloat(total).toFixed(2)}</li>
-          </ul>
-        </div>
-      `;
-
-      // Updated mail options with full HTML details
-      const userMailOptions = {
-        from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-        to: userEmail,
-        subject: `Order Submitted - ${orderId} (Pending Approval)`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2>Thank You for Your Order, ${userFullName}!</h2>
-            <p>Your order <strong>${orderId}</strong> has been submitted on ${new Date().toLocaleDateString()} and is currently <strong>pending admin approval</strong>.</p>
-            <p><strong>Important:</strong></p>
-            <ul>
-              <li>This order cannot be edited or canceled after 24 hours.</li>
-              <li>Please note: Your order will be considered accepted after 24 hours of placement.</li>
-              <li>Shipping charges will be applied by the admin based on your location's shipping zone. You'll receive an updated order amount via email once finalized.</li>
-            </ul>
-            ${orderDetailsHtml}
-          </div>
-        `,
-      };
-
-      const adminMailOptions = {
-        from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-        to: "aashish.shroff@zeta-v.com",
-        subject: `New Order Pending Approval - ${orderId}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2>New Order Pending Approval: ${orderId}</h2>
-            <p>A new order has been submitted by <strong>${userFullName}</strong> (${userEmail}) on ${new Date().toLocaleDateString()}.</p>
-            <p><strong>Phone:</strong> ${userPhone}</p>
-            ${orderDetailsHtml}
-          </div>
-        `,
-      };
-
-      try {
-        await Promise.all([
-          transporter.sendMail(userMailOptions),
-          transporter.sendMail(adminMailOptions),
-        ]);
-      } catch (emailErr) {
-        console.error("Email sending failed:", emailErr);
+      if (itemResult.length === 0) {
+        throw new Error(`Item with SKU ${item.sku} not found in inventory`);
       }
 
-      res.status(201).json({
-        message: "Order submitted successfully and is pending admin approval",
-        order_id: orderId,
-      });
-    } catch (err) {
+      const availableQty = parseFloat(itemResult[0].qty) || 0;
+      if (availableQty < item.quantity) {
+        throw new Error(
+          `Insufficient stock for SKU ${item.sku}. Available: ${availableQty}, Requested: ${item.quantity}`
+        );
+      }
+    }
+
+    // Insert order
+    const [orderResult] = await connection.query(
+      `INSERT INTO orders (
+        user_id, door_style, finish_type, stain_option, paint_option, 
+        account, bill_to, design_services_price, assembly_flag, 
+        subtotal, tax, shipping, discount, total, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', NOW())`,
+      [
+        userId,
+        doorStyle,
+        finishType,
+        stainOption || null,
+        paintOption || null,
+        account,
+        billTo,
+        designServicesPrice || 0,
+        assemblyFlag,
+        subtotal,
+        tax,
+        shipping !== undefined ? shipping : null,
+        discount || 0,
+        total,
+      ]
+    );
+
+    const autoId = orderResult.insertId;
+
+    // Generate order_id
+    const orderId = `S-ORD${String(autoId + 101001).padStart(6, "0")}`;
+
+    // Update order_id
+    await connection.query(`UPDATE orders SET order_id = ? WHERE id = ?`, [
+      orderId,
+      autoId,
+    ]);
+
+    // Insert order items and update inventory
+    for (const item of items) {
+      // Insert into order_items
+      await connection.query(
+        `INSERT INTO order_items (order_id, sku, name, quantity, price, total_amount, door_style, finish)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          autoId,
+          item.sku,
+          item.name,
+          item.quantity,
+          item.price || null,
+          item.totalAmount || null,
+          doorStyle,
+          finishType,
+        ]
+      );
+
+      // Update qty in items table
+      await connection.query(
+        `UPDATE items SET qty = qty - ? WHERE sku = ?`,
+        [item.quantity, item.sku]
+      );
+    }
+
+    // Commit transaction
+    await connection.commit();
+
+    // Email template
+    const orderDetailsHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h3>Order Details</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li><strong>Door Style:</strong> ${doorStyle}</li>
+          <li><strong>Finish Type:</strong> ${finishType}</li>
+          ${
+            stainOption
+              ? `<li><strong>Stain Option:</strong> ${stainOption}</li>`
+              : ""
+          }
+          ${
+            paintOption
+              ? `<li><strong>Paint Option:</strong> ${paintOption}</li>`
+              : ""
+          }
+          <li><strong>Ship To:</strong> ${account}</li>
+          <li><strong>Bill To:</strong> ${billTo}</li>
+          ${
+            designServicesPrice > 0
+              ? `<li><strong>Design Services:</strong> $${parseFloat(
+                  designServicesPrice
+                ).toFixed(2)}</li>`
+              : ""
+          }
+          ${
+            assemblyFlag === "Included"
+              ? `<li><strong>Assembly Services:</strong> Included</li>`
+              : ""
+          }
+        </ul>
+        <h3>Items</h3>
+        <table style="border-collapse: collapse; width: 100%;">
+          <thead>
+            <tr style="background-color: #f2f2f2;">
+              <th style="border: 1px solid #ddd; padding: 8px;">SKU</th>
+              <th style="border: 1px solid #ddd; padding: 8px;">Name</th>
+              <th style="border: 1px solid #ddd; padding: 8px;">Quantity</th>
+              <th style="border: 1px solid #ddd; padding: 8px;">Price ($)</th>
+              <th style="border: 1px solid #ddd; padding: 8px;">Total ($)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items
+              .map(
+                (item) => `
+              <tr>
+                <td style="border: 1px solid #ddd; padding: 8px;">${
+                  item.sku
+                }</td>
+                <td style="border: 1px solid #ddd; padding: 8px;">${
+                  item.name
+                }</td>
+                <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${
+                  item.quantity
+                }</td>
+                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${parseFloat(
+                  item.price || 0
+                ).toFixed(2)}</td>
+                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${parseFloat(
+                  item.totalAmount || 0
+                ).toFixed(2)}</td>
+              </tr>
+            `
+              )
+              .join("")}
+          </tbody>
+        </table>
+        <h3>Price Summary</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li><strong>Subtotal:</strong> $${parseFloat(subtotal).toFixed(
+            2
+          )}</li>
+          ${
+            discount > 0
+              ? `<li><strong>Discount:</strong> $${parseFloat(
+                  discount
+                ).toFixed(2)}</li>`
+              : ""
+          }
+          <li><strong>Tax (7%):</strong> $${parseFloat(tax).toFixed(2)}</li>
+          <li><strong>Shipping:</strong> ${
+            shipping !== null ? `$${parseFloat(shipping).toFixed(2)}` : "-"
+          }</li>
+          <li><strong>Total:</strong> $${parseFloat(total).toFixed(2)}</li>
+        </ul>
+      </div>
+    `;
+
+    const userMailOptions = {
+      from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+      to: userEmail,
+      subject: `Order Submitted - ${orderId} (Pending Approval)`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2>Thank You for Your Order, ${userFullName}!</h2>
+          <p>Your order <strong>${orderId}</strong> has been submitted on ${new Date().toLocaleDateString()} and is currently <strong>pending admin approval</strong>.</p>
+          <p><strong>Important:</strong></p>
+          <ul>
+            <li>This order cannot be edited or canceled after 24 hours.</li>
+            <li>Please note: Your order will be considered accepted after 24 hours of placement.</li>
+            <li>Shipping charges will be applied by the admin based on your location's shipping zone. You'll receive an updated order amount via email once finalized.</li>
+          </ul>
+          ${orderDetailsHtml}
+        </div>
+      `,
+    };
+
+    const adminMailOptions = {
+      from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+      to: "aashish.shroff@zeta-v.com",
+      subject: `New Order Pending Approval - ${orderId}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2>New Order Pending Approval: ${orderId}</h2>
+          <p>A new order has been submitted by <strong>${userFullName}</strong> (${userEmail}) on ${new Date().toLocaleDateString()}.</p>
+          <p><strong>Phone:</strong> ${userPhone}</p>
+          ${orderDetailsHtml}
+        </div>
+      `,
+    };
+
+    try {
+      await Promise.all([
+        transporter.sendMail(userMailOptions),
+        transporter.sendMail(adminMailOptions),
+      ]);
+    } catch (emailErr) {
+      console.error("Email sending failed:", emailErr);
+    }
+
+    res.status(201).json({
+      message: "Order submitted successfully and is pending admin approval",
+      order_id: orderId,
+    });
+  } catch (err) {
+    if (connection) {
       await connection.rollback();
       connection.release();
-      console.error("Transaction failed:", err);
-      res.status(500).json({ error: "Error placing order" });
     }
-  } catch (err) {
-    console.error("Server error:", err);
-    res.status(500).json({ error: "Server error" });
+    console.error("Transaction failed:", err);
+    res.status(400).json({ error: err.message || "Error placing order" });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 });
+
+
 
 app.get("/api/orders", authenticateToken, async (req, res) => {
   try {
@@ -980,6 +1665,8 @@ app.get("/api/orders", authenticateToken, async (req, res) => {
           o.total,
           o.discount,
           o.additional_discount,
+          o.design_services_price,
+          o.assembly_flag,
           o.status,
           GROUP_CONCAT(
             JSON_OBJECT(
@@ -1019,6 +1706,10 @@ app.get("/api/orders", authenticateToken, async (req, res) => {
         total: `$${parseFloat(order.total || 0).toFixed(2)}`,
         subtotal: parseFloat(order.subtotal || 0).toFixed(2),
         discount: parseFloat(order.discount || 0).toFixed(2),
+        design_services_price: parseFloat(
+          order.design_services_price || 0
+        ).toFixed(2),
+        assembly_flag: order.assembly_flag,
         additional_discount: parseFloat(order.additional_discount || 0).toFixed(
           2
         ),
@@ -2929,7 +3620,7 @@ app.put("/api/admin/vendor/:id/status",adminauthenticateToken,
 //   }
 // );
 
-app.put("/api/admin/user/:id/discount",adminauthenticateToken,
+app.put( "/api/admin/user/:id/discount",adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { admin_discount, notes } = req.body;
@@ -3074,6 +3765,8 @@ app.get("/api/admin/orders", adminauthenticateToken, async (req, res) => {
         o.shipping,
         o.discount,
         o.additional_discount,
+              o.design_services_price,
+          o.assembly_flag,
         o.total,
         o.status,
         GROUP_CONCAT(
@@ -3111,6 +3804,10 @@ app.get("/api/admin/orders", adminauthenticateToken, async (req, res) => {
       total: `$${parseFloat(order.total || 0).toFixed(2)}`,
       subtotal: parseFloat(order.subtotal || 0).toFixed(2),
       discount: parseFloat(order.discount || 0).toFixed(2),
+      design_services_price: parseFloat(
+        order.design_services_price || 0
+      ).toFixed(2),
+      assembly_flag: order.assembly_flag,
       additional_discount: parseFloat(order.additional_discount || 0).toFixed(
         2
       ),
@@ -3155,6 +3852,9 @@ app.get("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
         o.shipping,
         o.discount,
         o.additional_discount,
+          
+              o.design_services_price,
+                o.assembly_flag,
         o.total,
         o.status,
         o.created_at AS createdAt,
@@ -3203,6 +3903,10 @@ app.get("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
         tax: parseFloat(order.tax || 0).toFixed(2),
         shipping: order.shipping ? parseFloat(order.shipping).toFixed(2) : null,
         discount: parseFloat(order.discount || 0).toFixed(2),
+        design_services_price: parseFloat(
+          order.design_services_price || 0
+        ).toFixed(2),
+        assembly_flag: order.assembly_flag,
         additional_discount: parseFloat(order.additional_discount || 0).toFixed(
           2
         ),
@@ -3534,107 +4238,515 @@ app.put("/api/admin/orders/:id/shipping",adminauthenticateToken,
   }
 );
 
-app.put("/api/admin/orders/:id/status",adminauthenticateToken,
-  async (req, res) => {
-    const { id } = req.params;
-    const { status } = req.body;
+// app.put("/api/admin/orders/:id/status",adminauthenticateToken,
+//   async (req, res) => {
+//     const { id } = req.params;
+//     const { status } = req.body;
 
-    if (
-      !["Pending", "Accepted", "Processing", "Completed", "Cancelled"].includes(
-        status
-      )
-    ) {
-      return res.status(400).json({
-        error:
-          "Invalid status. Must be Pending, Accepted, Processing, Completed, or Cancelled",
-      });
-    }
+//     if (
+//       !["Pending", "Accepted", "Processing", "Completed", "Cancelled"].includes(
+//         status
+//       )
+//     ) {
+//       return res.status(400).json({
+//         error:
+//           "Invalid status. Must be Pending, Accepted, Processing, Completed, or Cancelled",
+//       });
+//     }
 
-    try {
-      const [orders] = await pool.query(
-        `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option, 
+//     try {
+//       const [orders] = await pool.query(
+//         `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option, 
+//               o.subtotal, o.tax, o.shipping, o.discount, o.additional_discount, o.total, o.status, 
+//               u.full_name, u.email 
+//        FROM orders o 
+//        LEFT JOIN users u ON o.user_id = u.id 
+//        WHERE o.id = ?`,
+//         [id]
+//       );
+
+//       if (orders.length === 0) {
+//         return res.status(404).json({ error: "Order not found" });
+//       }
+
+//       const order = orders[0];
+
+//       if (order.status === "Cancelled") {
+//         return res.status(400).json({
+//           error: "Cannot update status of a cancelled order",
+//         });
+//       }
+
+//       const user = {
+//         full_name: order.full_name || "Customer",
+//         email: order.email || "N/A",
+//       };
+//       const additionalDiscountPercent =
+//         order.subtotal && order.additional_discount
+//           ? ((order.additional_discount / order.subtotal) * 100).toFixed(2)
+//           : "0.00";
+
+//       // Update order status
+//       await pool.query("UPDATE orders SET status = ? WHERE id = ?", [
+//         status,
+//         id,
+//       ]);
+
+//       // Generate invoice if status is Completed
+//       let invoiceNumber = null;
+//       if (status === "Completed") {
+//         invoiceNumber = `INV-${order.order_id}-${Date.now()}`;
+//         await pool.query(
+//           `INSERT INTO invoices (invoice_number, order_id, user_id, subtotal, tax, shipping, discount, additional_discount, total)
+//          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+//           [
+//             invoiceNumber,
+//             order.id,
+//             order.user_id,
+//             order.subtotal,
+//             order.tax,
+//             order.shipping,
+//             order.discount,
+//             order.additional_discount,
+//             order.total,
+//           ]
+//         );
+//       }
+
+//       // Fetch order items for email
+//       const [orderItems] = await pool.query(
+//         `SELECT sku, name, quantity, door_style, finish, price, total_amount 
+//        FROM order_items 
+//        WHERE order_id = ?`,
+//         [order.id]
+//       );
+
+//       // Send email for status updates
+//       if (
+//         ["Accepted", "Processing", "Completed", "Cancelled"].includes(status) &&
+//         user.email !== "N/A"
+//       ) {
+//         let mailOptions;
+//         switch (status) {
+//           case "Completed":
+//             mailOptions = {
+//               from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//               to: user.email,
+//               subject: `Your Order #${order.order_id} Has Been Completed! Invoice #${invoiceNumber}`,
+//               html: `
+//               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//                 <h2>Hello, ${user.full_name}!</h2>
+//                 <p>Fantastic news! Your order <strong>#${
+//                   order.order_id
+//                 }</strong> has been completed and shipped.</p>
+//                 <p>Your invoice <strong>#${invoiceNumber}</strong> is now available in your customer portal.</p>
+//                 <h3>Invoice Details:</h3>
+//                 <table style="width: 100%; border-collapse: collapse;">
+//                   <thead>
+//                     <tr style="background-color: #f2f2f2;">
+//                       <th style="border: 1px solid #ddd; padding: 8px;">SKU</th>
+//                       <th style="border: 1px solid #ddd; padding: 8px;">Name</th>
+//                       <th style="border: 1px solid #ddd; padding: 8px;">Quantity</th>
+//                       <th style="border: 1px solid #ddd; padding: 8px;">Price</th>
+//                       <th style="border: 1px solid #ddd; padding: 8px;">Total</th>
+//                     </tr>
+//                   </thead>
+//                   <tbody>
+//                     ${orderItems
+//                       .map(
+//                         (item) => `
+//                       <tr>
+//                         <td style="border: 1px solid #ddd; padding: 8px;">${
+//                           item.sku
+//                         }</td>
+//                         <td style="border: 1px solid #ddd; padding: 8px;">${
+//                           item.name
+//                         }</td>
+//                         <td style="border: 1px solid #ddd; padding: 8px;">${
+//                           item.quantity
+//                         }</td>
+//                         <td style="border: 1px solid #ddd; padding: 8px;">$${parseFloat(
+//                           item.price || 0
+//                         ).toFixed(2)}</td>
+//                         <td style="border: 1px solid #ddd; padding: 8px;">$${parseFloat(
+//                           item.total_amount || 0
+//                         ).toFixed(2)}</td>
+//                       </tr>
+//                     `
+//                       )
+//                       .join("")}
+//                   </tbody>
+//                 </table>
+//                 <h3 style="margin-top: 20px;">Summary:</h3>
+//                 <ul style="list-style: none; padding: 0;">
+//                   <li><strong>Subtotal:</strong> $${parseFloat(
+//                     order.subtotal
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Special Discount:</strong> $${parseFloat(
+//                     order.discount || 0
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+//                 order.additional_discount || 0
+//               ).toFixed(2)})</li>
+//                   <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+//                     2
+//                   )}</li>
+//                   <li><strong>Shipping:</strong> ${
+//                     order.shipping !== null
+//                       ? `$${parseFloat(order.shipping).toFixed(2)}`
+//                       : "-"
+//                   }</li>
+//                   <li><strong>Total:</strong> $${parseFloat(
+//                     order.total
+//                   ).toFixed(2)}</li>
+//                 </ul>
+//                 <p><strong>Next Steps:</strong></p>
+//                 <ul>
+//                   <li>Your order has been shipped. Check your email for tracking information.</li>
+//                   <li>View your invoice at <a href="https://studiosignaturecabinets.com/customer/invoices">My Invoices</a>.</li>
+//                 </ul>
+//                 <p>If you have any issues, contact us at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+//                 <p>Enjoy your new cabinets!</p>
+//                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//               </div>
+//             `,
+//             };
+//             break;
+//           // Other cases (Accepted, Processing, Cancelled) remain unchanged from your original code
+//           case "Accepted":
+//             mailOptions = {
+//               from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//               to: user.email,
+//               subject: `Your Order #${order.order_id} Has Been Accepted!`,
+//               html: `
+//               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//                 <h2>Hello, ${user.full_name}!</h2>
+//                 <p>Great news! Your order <strong>#${
+//                   order.order_id
+//                 }</strong> has been accepted and is now being processed.</p>
+//                 <h3>Order Details:</h3>
+//                 <ul style="list-style: none; padding: 0;">
+//                   <li><strong>Order ID:</strong> ${order.order_id}</li>
+//                   <li><strong>Door Style:</strong> ${order.door_style}</li>
+//                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
+//                   ${
+//                     order.stain_option
+//                       ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+//                       : ""
+//                   }
+//                   ${
+//                     order.paint_option
+//                       ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+//                       : ""
+//                   }
+//                   <li><strong>Subtotal:</strong> $${parseFloat(
+//                     order.subtotal
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Special Discount:</strong> $${parseFloat(
+//                     order.discount || 0
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+//                 order.additional_discount || 0
+//               ).toFixed(2)})</li>
+//                   <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+//                     2
+//                   )}</li>
+//                   <li><strong>Shipping:</strong> ${
+//                     order.shipping !== null
+//                       ? `$${parseFloat(order.shipping).toFixed(2)}`
+//                       : "-"
+//                   }</li>
+//                   <li><strong>Total:</strong> $${parseFloat(
+//                     order.total
+//                   ).toFixed(2)}</li>
+//                 </ul>
+//                 <p><strong>Next Steps:</strong></p>
+//                 <ul>
+//                   <li>Your order is now in the processing stage. We’ll notify you with updates on its progress.</li>
+//                   <li>You can track your order status in your account at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
+//                 </ul>
+//                 <p>If you have any questions, please contact our support team at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+//                 <p>Thank you for choosing Studio Signature Cabinets!</p>
+//                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//               </div>
+//             `,
+//             };
+//             break;
+//           case "Processing":
+//             mailOptions = {
+//               from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//               to: user.email,
+//               subject: `Your Order #${order.order_id} is Being Processed!`,
+//               html: `
+//               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//                 <h2>Hello, ${user.full_name}!</h2>
+//                 <p>Your order <strong>#${
+//                   order.order_id
+//                 }</strong> is now being processed. We're preparing your items for shipment.</p>
+//                 <h3>Order Details:</h3>
+//                 <ul style="list-style: none; padding: 0;">
+//                   <li><strong>Order ID:</strong> ${order.order_id}</li>
+//                   <li><strong>Door Style:</strong> ${order.door_style}</li>
+//                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
+//                   ${
+//                     order.stain_option
+//                       ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+//                       : ""
+//                   }
+//                   ${
+//                     order.paint_option
+//                       ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+//                       : ""
+//                   }
+//                   <li><strong>Subtotal:</strong> $${parseFloat(
+//                     order.subtotal
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Special Discount:</strong> $${parseFloat(
+//                     order.discount || 0
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+//                 order.additional_discount || 0
+//               ).toFixed(2)})</li>
+//                   <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+//                     2
+//                   )}</li>
+//                   <li><strong>Shipping:</strong> ${
+//                     order.shipping !== null
+//                       ? `$${parseFloat(order.shipping).toFixed(2)}`
+//                       : "-"
+//                   }</li>
+//                   <li><strong>Total:</strong> $${parseFloat(
+//                     order.total
+//                   ).toFixed(2)}</li>
+//                 </ul>
+//                 <p><strong>Next Steps:</strong></p>
+//                 <ul>
+//                   <li>We are preparing your order for shipment. You’ll receive a shipping confirmation soon.</li>
+//                   <li>Track your order status at <a href="https://studiosignaturecabinets.com/customer/orders">My Orders</a>.</li>
+//                 </ul>
+//                 <p>For inquiries, contact us at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</p>
+//                 <p>Thank you for your patience!</p>
+//                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//               </div>
+//             `,
+//             };
+//             break;
+//           case "Cancelled":
+//             mailOptions = {
+//               from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//               to: user.email,
+//               subject: `Your Order #${order.order_id} Has Been Cancelled`,
+//               html: `
+//               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//                 <h2>Hello, ${user.full_name}!</h2>
+//                 <p>We’re sorry to inform you that your order <strong>#${
+//                   order.order_id
+//                 }</strong> has been cancelled.</p>
+//                 <p><strong>Note:</strong> This order cannot be reinstated or modified once cancelled.</p>
+//                 <h3>Order Details:</h3>
+//                 <ul style="list-style: none; padding: 0;">
+//                   <li><strong>Order ID:</strong> ${order.order_id}</li>
+//                   <li><strong>Door Style:</strong> ${order.door_style}</li>
+//                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
+//                   ${
+//                     order.stain_option
+//                       ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+//                       : ""
+//                   }
+//                   ${
+//                     order.paint_option
+//                       ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+//                       : ""
+//                   }
+//                   <li><strong>Subtotal:</strong> $${parseFloat(
+//                     order.subtotal
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Special Discount:</strong> $${parseFloat(
+//                     order.discount || 0
+//                   ).toFixed(2)}</li>
+//                   <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+//                 order.additional_discount || 0
+//               ).toFixed(2)})</li>
+//                   <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+//                     2
+//                   )}</li>
+//                   <li><strong>Shipping:</strong> ${
+//                     order.shipping !== null
+//                       ? `$${parseFloat(order.shipping).toFixed(2)}`
+//                       : "-"
+//                   }</li>
+//                   <li><strong>Total:</strong> $${parseFloat(
+//                     order.total
+//                   ).toFixed(2)}</li>
+//                 </ul>
+//                 <p><strong>Next Steps:</strong></p>
+//                 <ul>
+//                   <li>If this was unexpected, please contact us immediately at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</li>
+//                   <li>Explore our products to place a new order at <a href="https://studiosignaturecabinets.com">Studio Signature Cabinets</a>.</li>
+//                 </ul>
+//                 <p>We apologize for any inconvenience. Let us know how we can assist you further.</p>
+//                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//               </div>
+//             `,
+//             };
+//             break;
+//         }
+
+//         try {
+//           await transporter.sendMail(mailOptions);
+//           console.log(
+//             `Email sent for order ${order.order_id} status: ${status}`
+//           );
+//         } catch (emailErr) {
+//           console.error(`Failed to send email for ${status} status:`, emailErr);
+//         }
+//       }
+
+//       res.json({ message: "Order status updated successfully" });
+//     } catch (err) {
+//       console.error("Server error:", err);
+//       res.status(500).json({ error: "Server error" });
+//     }
+//   }
+// );
+
+
+
+app.put("/api/admin/orders/:id/status", adminauthenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  let connection;
+
+  // Validate status
+  if (!["Pending", "Accepted", "Processing", "Completed", "Cancelled"].includes(status)) {
+    return res.status(400).json({
+      error: "Invalid status. Must be Pending, Accepted, Processing, Completed, or Cancelled",
+    });
+  }
+
+  try {
+    // Start transaction
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    // Fetch order details
+    const [orders] = await connection.query(
+      `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option, 
               o.subtotal, o.tax, o.shipping, o.discount, o.additional_discount, o.total, o.status, 
               u.full_name, u.email 
        FROM orders o 
        LEFT JOIN users u ON o.user_id = u.id 
        WHERE o.id = ?`,
-        [id]
-      );
+      [id]
+    );
 
-      if (orders.length === 0) {
-        return res.status(404).json({ error: "Order not found" });
-      }
+    if (orders.length === 0) {
+      await connection.rollback();
+      connection.release();
+      return res.status(404).json({ error: "Order not found" });
+    }
 
-      const order = orders[0];
+    const order = orders[0];
 
-      if (order.status === "Cancelled") {
-        return res.status(400).json({
-          error: "Cannot update status of a cancelled order",
-        });
-      }
+    // Prevent updating a cancelled order
+    if (order.status === "Cancelled") {
+      await connection.rollback();
+      connection.release();
+      return res.status(400).json({
+        error: "Cannot update status of a cancelled order",
+      });
+    }
 
-      const user = {
-        full_name: order.full_name || "Customer",
-        email: order.email || "N/A",
-      };
-      const additionalDiscountPercent =
-        order.subtotal && order.additional_discount
-          ? ((order.additional_discount / order.subtotal) * 100).toFixed(2)
-          : "0.00";
+    const user = {
+      full_name: order.full_name || "Customer",
+      email: order.email || "N/A",
+    };
+    const additionalDiscountPercent =
+      order.subtotal && order.additional_discount
+        ? ((order.additional_discount / order.subtotal) * 100).toFixed(2)
+        : "0.00";
 
-      // Update order status
-      await pool.query("UPDATE orders SET status = ? WHERE id = ?", [
-        status,
-        id,
-      ]);
-
-      // Generate invoice if status is Completed
-      let invoiceNumber = null;
-      if (status === "Completed") {
-        invoiceNumber = `INV-${order.order_id}-${Date.now()}`;
-        await pool.query(
-          `INSERT INTO invoices (invoice_number, order_id, user_id, subtotal, tax, shipping, discount, additional_discount, total)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            invoiceNumber,
-            order.id,
-            order.user_id,
-            order.subtotal,
-            order.tax,
-            order.shipping,
-            order.discount,
-            order.additional_discount,
-            order.total,
-          ]
-        );
-      }
-
-      // Fetch order items for email
-      const [orderItems] = await pool.query(
-        `SELECT sku, name, quantity, door_style, finish, price, total_amount 
-       FROM order_items 
-       WHERE order_id = ?`,
+    // If status is Cancelled, restore item quantities
+    if (status === "Cancelled") {
+      // Fetch order items
+      const [orderItems] = await connection.query(
+        `SELECT sku, quantity 
+         FROM order_items 
+         WHERE order_id = ?`,
         [order.id]
       );
 
-      // Send email for status updates
-      if (
-        ["Accepted", "Processing", "Completed", "Cancelled"].includes(status) &&
-        user.email !== "N/A"
-      ) {
-        let mailOptions;
-        switch (status) {
-          case "Completed":
-            mailOptions = {
-              from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-              to: user.email,
-              subject: `Your Order #${order.order_id} Has Been Completed! Invoice #${invoiceNumber}`,
-              html: `
+      // Update qty in items table for each order item
+      for (const item of orderItems) {
+        const [itemResult] = await connection.query(
+          `SELECT id FROM items WHERE sku = ?`,
+          [item.sku]
+        );
+
+        if (itemResult.length === 0) {
+          await connection.rollback();
+          connection.release();
+          return res.status(400).json({
+            error: `Item with SKU ${item.sku} not found in inventory`,
+          });
+        }
+
+        await connection.query(
+          `UPDATE items SET qty = qty + ? WHERE sku = ?`,
+          [item.quantity, item.sku]
+        );
+      }
+    }
+
+    // Update order status
+    await connection.query("UPDATE orders SET status = ? WHERE id = ?", [status, id]);
+
+    // Generate invoice if status is Completed
+    let invoiceNumber = null;
+    if (status === "Completed") {
+      invoiceNumber = `INV-${order.order_id}-${Date.now()}`;
+      await connection.query(
+        `INSERT INTO invoices (invoice_number, order_id, user_id, subtotal, tax, shipping, discount, additional_discount, total)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          invoiceNumber,
+          order.id,
+          order.user_id,
+          order.subtotal,
+          order.tax,
+          order.shipping,
+          order.discount,
+          order.additional_discount,
+          order.total,
+        ]
+      );
+    }
+
+    // Fetch order items for email
+    const [orderItems] = await connection.query(
+      `SELECT sku, name, quantity, door_style, finish, price, total_amount 
+       FROM order_items 
+       WHERE order_id = ?`,
+      [order.id]
+    );
+
+    // Commit transaction
+    await connection.commit();
+    connection.release();
+
+    // Send email for status updates
+    if (["Accepted", "Processing", "Completed", "Cancelled"].includes(status) && user.email !== "N/A") {
+      let mailOptions;
+      switch (status) {
+        case "Completed":
+          mailOptions = {
+            from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+            to: user.email,
+            subject: `Your Order #${order.order_id} Has Been Completed! Invoice #${invoiceNumber}`,
+            html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>Fantastic news! Your order <strong>#${
-                  order.order_id
-                }</strong> has been completed and shipped.</p>
+                <p>Fantastic news! Your order <strong>#${order.order_id}</strong> has been completed and shipped.</p>
                 <p>Your invoice <strong>#${invoiceNumber}</strong> is now available in your customer portal.</p>
                 <h3>Invoice Details:</h3>
                 <table style="width: 100%; border-collapse: collapse;">
@@ -3652,21 +4764,11 @@ app.put("/api/admin/orders/:id/status",adminauthenticateToken,
                       .map(
                         (item) => `
                       <tr>
-                        <td style="border: 1px solid #ddd; padding: 8px;">${
-                          item.sku
-                        }</td>
-                        <td style="border: 1px solid #ddd; padding: 8px;">${
-                          item.name
-                        }</td>
-                        <td style="border: 1px solid #ddd; padding: 8px;">${
-                          item.quantity
-                        }</td>
-                        <td style="border: 1px solid #ddd; padding: 8px;">$${parseFloat(
-                          item.price || 0
-                        ).toFixed(2)}</td>
-                        <td style="border: 1px solid #ddd; padding: 8px;">$${parseFloat(
-                          item.total_amount || 0
-                        ).toFixed(2)}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">${item.sku}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">${item.name}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">${item.quantity}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">$${parseFloat(item.price || 0).toFixed(2)}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">$${parseFloat(item.total_amount || 0).toFixed(2)}</td>
                       </tr>
                     `
                       )
@@ -3675,26 +4777,12 @@ app.put("/api/admin/orders/:id/status",adminauthenticateToken,
                 </table>
                 <h3 style="margin-top: 20px;">Summary:</h3>
                 <ul style="list-style: none; padding: 0;">
-                  <li><strong>Subtotal:</strong> $${parseFloat(
-                    order.subtotal
-                  ).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(
-                    order.discount || 0
-                  ).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
-                order.additional_discount || 0
-              ).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
-                    2
-                  )}</li>
-                  <li><strong>Shipping:</strong> ${
-                    order.shipping !== null
-                      ? `$${parseFloat(order.shipping).toFixed(2)}`
-                      : "-"
-                  }</li>
-                  <li><strong>Total:</strong> $${parseFloat(
-                    order.total
-                  ).toFixed(2)}</li>
+                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
+                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
+                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -3706,55 +4794,30 @@ app.put("/api/admin/orders/:id/status",adminauthenticateToken,
                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
               </div>
             `,
-            };
-            break;
-          // Other cases (Accepted, Processing, Cancelled) remain unchanged from your original code
-          case "Accepted":
-            mailOptions = {
-              from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-              to: user.email,
-              subject: `Your Order #${order.order_id} Has Been Accepted!`,
-              html: `
+          };
+          break;
+        case "Accepted":
+          mailOptions = {
+            from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+            to: user.email,
+            subject: `Your Order #${order.order_id} Has Been Accepted!`,
+            html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>Great news! Your order <strong>#${
-                  order.order_id
-                }</strong> has been accepted and is now being processed.</p>
+                <p>Great news! Your order <strong>#${order.order_id}</strong> has been accepted and is now being processed.</p>
                 <h3>Order Details:</h3>
                 <ul style="list-style: none; padding: 0;">
                   <li><strong>Order ID:</strong> ${order.order_id}</li>
                   <li><strong>Door Style:</strong> ${order.door_style}</li>
                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
-                  ${
-                    order.stain_option
-                      ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
-                      : ""
-                  }
-                  ${
-                    order.paint_option
-                      ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
-                      : ""
-                  }
-                  <li><strong>Subtotal:</strong> $${parseFloat(
-                    order.subtotal
-                  ).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(
-                    order.discount || 0
-                  ).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
-                order.additional_discount || 0
-              ).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
-                    2
-                  )}</li>
-                  <li><strong>Shipping:</strong> ${
-                    order.shipping !== null
-                      ? `$${parseFloat(order.shipping).toFixed(2)}`
-                      : "-"
-                  }</li>
-                  <li><strong>Total:</strong> $${parseFloat(
-                    order.total
-                  ).toFixed(2)}</li>
+                  ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
+                  ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
+                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
+                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
+                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -3766,54 +4829,30 @@ app.put("/api/admin/orders/:id/status",adminauthenticateToken,
                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
               </div>
             `,
-            };
-            break;
-          case "Processing":
-            mailOptions = {
-              from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-              to: user.email,
-              subject: `Your Order #${order.order_id} is Being Processed!`,
-              html: `
+          };
+          break;
+        case "Processing":
+          mailOptions = {
+            from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+            to: user.email,
+            subject: `Your Order #${order.order_id} is Being Processed!`,
+            html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>Your order <strong>#${
-                  order.order_id
-                }</strong> is now being processed. We're preparing your items for shipment.</p>
+                <p>Your order <strong>#${order.order_id}</strong> is now being processed. We're preparing your items for shipment.</p>
                 <h3>Order Details:</h3>
                 <ul style="list-style: none; padding: 0;">
                   <li><strong>Order ID:</strong> ${order.order_id}</li>
                   <li><strong>Door Style:</strong> ${order.door_style}</li>
                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
-                  ${
-                    order.stain_option
-                      ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
-                      : ""
-                  }
-                  ${
-                    order.paint_option
-                      ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
-                      : ""
-                  }
-                  <li><strong>Subtotal:</strong> $${parseFloat(
-                    order.subtotal
-                  ).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(
-                    order.discount || 0
-                  ).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
-                order.additional_discount || 0
-              ).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
-                    2
-                  )}</li>
-                  <li><strong>Shipping:</strong> ${
-                    order.shipping !== null
-                      ? `$${parseFloat(order.shipping).toFixed(2)}`
-                      : "-"
-                  }</li>
-                  <li><strong>Total:</strong> $${parseFloat(
-                    order.total
-                  ).toFixed(2)}</li>
+                  ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
+                  ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
+                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
+                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
+                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -3825,55 +4864,31 @@ app.put("/api/admin/orders/:id/status",adminauthenticateToken,
                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
               </div>
             `,
-            };
-            break;
-          case "Cancelled":
-            mailOptions = {
-              from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-              to: user.email,
-              subject: `Your Order #${order.order_id} Has Been Cancelled`,
-              html: `
+          };
+          break;
+        case "Cancelled":
+          mailOptions = {
+            from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+            to: user.email,
+            subject: `Your Order #${order.order_id} Has Been Cancelled`,
+            html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>We’re sorry to inform you that your order <strong>#${
-                  order.order_id
-                }</strong> has been cancelled.</p>
+                <p>We’re sorry to inform you that your order <strong>#${order.order_id}</strong> has been cancelled.</p>
                 <p><strong>Note:</strong> This order cannot be reinstated or modified once cancelled.</p>
                 <h3>Order Details:</h3>
                 <ul style="list-style: none; padding: 0;">
                   <li><strong>Order ID:</strong> ${order.order_id}</li>
                   <li><strong>Door Style:</strong> ${order.door_style}</li>
                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
-                  ${
-                    order.stain_option
-                      ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
-                      : ""
-                  }
-                  ${
-                    order.paint_option
-                      ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
-                      : ""
-                  }
-                  <li><strong>Subtotal:</strong> $${parseFloat(
-                    order.subtotal
-                  ).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(
-                    order.discount || 0
-                  ).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
-                order.additional_discount || 0
-              ).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
-                    2
-                  )}</li>
-                  <li><strong>Shipping:</strong> ${
-                    order.shipping !== null
-                      ? `$${parseFloat(order.shipping).toFixed(2)}`
-                      : "-"
-                  }</li>
-                  <li><strong>Total:</strong> $${parseFloat(
-                    order.total
-                  ).toFixed(2)}</li>
+                  ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
+                  ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
+                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
+                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
+                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -3884,27 +4899,34 @@ app.put("/api/admin/orders/:id/status",adminauthenticateToken,
                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
               </div>
             `,
-            };
-            break;
-        }
-
-        try {
-          await transporter.sendMail(mailOptions);
-          console.log(
-            `Email sent for order ${order.order_id} status: ${status}`
-          );
-        } catch (emailErr) {
-          console.error(`Failed to send email for ${status} status:`, emailErr);
-        }
+          };
+          break;
       }
 
-      res.json({ message: "Order status updated successfully" });
-    } catch (err) {
-      console.error("Server error:", err);
-      res.status(500).json({ error: "Server error" });
+      try {
+        await transporter.sendMail(mailOptions);
+        console.log(`Email sent for order ${order.order_id} status: ${status}`);
+      } catch (emailErr) {
+        console.error(`Failed to send email for ${status} status:`, emailErr);
+      }
+    }
+
+    res.json({ message: "Order status updated successfully" });
+  } catch (err) {
+    if (connection) {
+      await connection.rollback();
+      connection.release();
+    }
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Server error" });
+  } finally {
+    if (connection) {
+      connection.release();
     }
   }
-);
+});
+
+
 
 cron.schedule("* * * * *", async () => {
   console.log(
@@ -4023,7 +5045,7 @@ cron.schedule("* * * * *", async () => {
   }
 });
 
-app.delete("/api/admin/orders/:id",adminauthenticateToken,
+app.delete("/api/admin/orders/:id", adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
 
@@ -4048,7 +5070,7 @@ app.delete("/api/admin/orders/:id",adminauthenticateToken,
 );
 
 // GET /api/contact/messages
-app.get( "/api/admin/contact/messages",adminauthenticateToken,
+app.get("/api/admin/contact/messages",adminauthenticateToken,
   async (req, res) => {
     try {
       const query = `
@@ -4066,8 +5088,7 @@ app.get( "/api/admin/contact/messages",adminauthenticateToken,
 );
 
 // Upload media
-app.post("/api/admin/elearning/upload",
-  adminauthenticateToken,
+app.post("/api/admin/elearning/upload",adminauthenticateToken,
   upload.single("media"),
   async (req, res) => {
     try {
@@ -4122,8 +5143,7 @@ app.get("/api/admin/elearning", adminauthenticateToken, async (req, res) => {
 });
 
 // Toggle visibility
-app.put(
-  "/api/admin/elearning/:id/toggle",
+app.put("/api/admin/elearning/:id/toggle",
   adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
@@ -4150,8 +5170,7 @@ app.put(
 );
 
 // Delete media
-app.delete(
-  "/api/admin/elearning/:id",
+app.delete("/api/admin/elearning/:id",
   adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
@@ -4212,8 +5231,7 @@ const validatePhone = (phone) => {
 };
 
 // Fetch all admins
-app.get(
-  "/api/adminuserpanel/admins",
+app.get("/api/adminuserpanel/admins",
   adminauthenticateToken,
   async (req, res) => {
     try {
@@ -4247,8 +5265,7 @@ app.get(
 //   }
 // );
 
-app.get(
-  "/api/adminuserpanel/users",
+app.get("/api/adminuserpanel/users",
   adminauthenticateToken,
   async (req, res) => {
     try {
@@ -4334,8 +5351,7 @@ app.get(
 //   }
 // );
 
-app.post(
-  "/api/adminuserpanel/register",
+app.post("/api/adminuserpanel/register",
   adminauthenticateToken,
   async (req, res) => {
     const { fullName, email, password, confirmPassword, phone, bio } = req.body;
@@ -4471,8 +5487,7 @@ const sendWelcomeEmail = async (email, fullName, userType, password) => {
   }
 };
 
-app.post(
-  "/api/adminuserpanel/signup",
+app.post("/api/adminuserpanel/signup",
   adminauthenticateToken,
   async (req, res) => {
     const {
@@ -4680,8 +5695,7 @@ app.post(
 
 // Delete a user from users table
 
-app.delete(
-  "/api/adminuserpanel/users/:id",
+app.delete("/api/adminuserpanel/users/:id",
   adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
@@ -4702,8 +5716,7 @@ app.delete(
 );
 
 // Delete an admin from admin table
-app.delete(
-  "/api/adminuserpanel/admins/:id",
+app.delete("/api/adminuserpanel/admins/:id",
   adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
@@ -4757,10 +5770,7 @@ app.delete(
 
 // GET /api/items?sku=<sku>&item_type=<item_type>&color=<color>
 
-
-app.get(
-  "/api/admin/vendorproducts",
-  adminauthenticateToken,
+app.get("/api/admin/vendorproducts",adminauthenticateToken,
   async (req, res) => {
     try {
       const { vendor_id } = req.query;
@@ -4791,12 +5801,11 @@ app.get(
   }
 );
 
-
 app.get("/api/admin/items", adminauthenticateToken, async (req, res) => {
   try {
     const { sku, item_type, color } = req.query;
     let query =
-      "SELECT id, sku, description, item_type, search_description, unit_of_measure, price, weight, cube, cw, gr, se, sw, created_at, updated_at, color FROM items WHERE 1=1";
+      "SELECT id, sku, description, item_type, search_description, unit_of_measure, price, weight, cube, cw, gr, se, sw, created_at, updated_at, color,qty FROM items WHERE 1=1";
     const params = [];
 
     if (sku) {
@@ -4821,6 +5830,70 @@ app.get("/api/admin/items", adminauthenticateToken, async (req, res) => {
 });
 
 // POST /api/admin/items
+// app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
+//   try {
+//     const {
+//       sku,
+//       description,
+//       item_type,
+//       unit_of_measure,
+//       color,
+//       price,
+//       search_description,
+//       qty,
+//       weight,
+//       cube,
+//       cw,
+//       gr,
+//       se,
+//       sw,
+//     } = req.body;
+
+//     if (
+//       !sku ||
+//       !description ||
+//       !item_type ||
+//       !unit_of_measure ||
+//       !color ||
+//       price == null
+//     ) {
+//       return res.status(400).json({
+//         error:
+//           "Missing required fields: sku, description, item_type, unit_of_measure, color, price",
+//       });
+//     }
+
+//     const [result] = await pool.query(
+//       "INSERT INTO items (sku, description, item_type, search_description, unit_of_measure, color, price,qty, weight, cube, cw, gr, se, sw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)",
+//       [
+//         sku,
+//         description,
+//         item_type.toUpperCase(),
+//         search_description || null,
+//         unit_of_measure,
+//         color,
+//         price,
+//         qty,
+//         weight || null,
+//         cube || null,
+//         cw || null,
+//         gr || null,
+//         se || null,
+//         sw || null,
+//       ]
+//     );
+
+//     const [newItem] = await pool.query("SELECT * FROM items WHERE id = ?", [
+//       result.insertId,
+//     ]);
+//     res.status(201).json(newItem[0]);
+//   } catch (err) {
+//     console.error("Error creating item:", err);
+//     res.status(500).json({ error: "Failed to create item" });
+//   }
+// });
+
+
 app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
   try {
     const {
@@ -4830,6 +5903,7 @@ app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
       unit_of_measure,
       color,
       price,
+      qty,
       search_description,
       weight,
       cube,
@@ -4839,22 +5913,24 @@ app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
       sw,
     } = req.body;
 
+    // Validate required fields
     if (
       !sku ||
       !description ||
       !item_type ||
       !unit_of_measure ||
       !color ||
-      price == null
+      price == null ||
+      qty == null
     ) {
       return res.status(400).json({
         error:
-          "Missing required fields: sku, description, item_type, unit_of_measure, color, price",
+          "Missing required fields: sku, description, item_type, unit_of_measure, color, price, qty",
       });
     }
 
     const [result] = await pool.query(
-      "INSERT INTO items (sku, description, item_type, search_description, unit_of_measure, color, price, weight, cube, cw, gr, se, sw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO items (sku, description, item_type, search_description, unit_of_measure, color, price, qty, weight, cube, cw, gr, se, sw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         sku,
         description,
@@ -4863,6 +5939,7 @@ app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
         unit_of_measure,
         color,
         price,
+        qty,
         weight || null,
         cube || null,
         cw || null,
@@ -4882,26 +5959,73 @@ app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
   }
 });
 
+
 // PUT /api/items/:id
+// app.put("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const { sku, description, item_type, unit_of_measure, color, price } =
+//       req.body;
+
+//     if (
+//       !sku ||
+//       !description ||
+//       !item_type ||
+//       !unit_of_measure ||
+//       !color ||
+//       price == null
+//     ) {
+//       return res.status(400).json({ error: "Missing required fields" });
+//     }
+
+//     const [result] = await pool.query(
+//       "UPDATE items SET sku = ?, description = ?, item_type = ?, unit_of_measure = ?, color = ?, price = ?, updated_at = NOW() WHERE id = ?",
+//       [
+//         sku,
+//         description,
+//         item_type.toUpperCase(),
+//         unit_of_measure,
+//         color,
+//         price,
+//         id,
+//       ]
+//     );
+
+//     if (result.affectedRows === 0) {
+//       return res.status(404).json({ error: "Item not found" });
+//     }
+
+//     res.json({ message: "Item updated successfully" });
+//   } catch (err) {
+//     console.error("Error updating item:", err);
+//     res.status(500).json({ error: "Failed to update item" });
+//   }
+// });
+
+
 app.put("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { sku, description, item_type, unit_of_measure, color, price } =
+    const { sku, description, item_type, unit_of_measure, color, price, qty } =
       req.body;
 
+    // Validate required fields
     if (
       !sku ||
       !description ||
       !item_type ||
       !unit_of_measure ||
       !color ||
-      price == null
+      price == null ||
+      qty == null
     ) {
-      return res.status(400).json({ error: "Missing required fields" });
+      return res.status(400).json({
+        error: "Missing required fields: sku, description, item_type, unit_of_measure, color, price, qty",
+      });
     }
 
     const [result] = await pool.query(
-      "UPDATE items SET sku = ?, description = ?, item_type = ?, unit_of_measure = ?, color = ?, price = ?, updated_at = NOW() WHERE id = ?",
+      "UPDATE items SET sku = ?, description = ?, item_type = ?, unit_of_measure = ?, color = ?, price = ?, qty = ?, updated_at = NOW() WHERE id = ?",
       [
         sku,
         description,
@@ -4909,6 +6033,7 @@ app.put("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
         unit_of_measure,
         color,
         price,
+        qty,
         id,
       ]
     );
@@ -4923,6 +6048,7 @@ app.put("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to update item" });
   }
 });
+
 
 // DELETE /api/items/:id
 app.delete("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
@@ -4941,304 +6067,255 @@ app.delete("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
   }
 });
 
-app.post("/api/admin/import-items", async (req, res) => {
+
+
+// app.post("/api/admin/import-items", async (req, res) => {
+//   let connection;
+
+//   try {
+//     // Get a connection from the pool
+//     connection = await pool.getConnection();
+
+//     // Read Excel file (adjust file path as needed)
+//     const filePath = "SSC MASTER LIST.xlsx";
+
+
+//     const workbook = XLSX.readFile(filePath);
+//     const sheet = workbook.Sheets[workbook.SheetNames[0]];
+//     const data = XLSX.utils.sheet_to_json(sheet);
+
+//     if (data.length === 0) {
+//       throw new Error("Excel file is empty or has no data rows");
+//     }
+
+//     console.log("Excel headers:", Object.keys(data[0]));
+
+//     let skippedRows = [];
+
+//     await connection.beginTransaction();
+
+//     for (const [index, item] of data.entries()) {
+//       // Normalize keys
+//       const itemKeys = Object.keys(item).reduce((acc, key) => {
+//         acc[key.toLowerCase().trim()] = item[key];
+//         return acc;
+//       }, {});
+
+//       // Map fields
+//       const sku = itemKeys["no"] ? String(itemKeys["no"]).trim() : null;
+//       const description = itemKeys["description"]
+//         ? String(itemKeys["description"]).trim()
+//         : null;
+//       const color = itemKeys["color"] ? String(itemKeys["color"]).trim() : null;
+//       const item_type = itemKeys["description 2"]
+//         ? String(itemKeys["description 2"]).trim()
+//         : "STAINED PLYWOOD";
+//       const search_description = itemKeys["item name"]
+//         ? String(itemKeys["item name"]).trim()
+//         : null;
+//       const unit_of_measure = itemKeys["base unit of measure"]
+//         ? String(itemKeys["base unit of measure"]).trim()
+//         : "Each";
+//       const price =
+//         itemKeys["unit price"] !== undefined
+//           ? parseFloat(itemKeys["unit price"])
+//           : null;
+//       const qty =
+//         itemKeys["qty"] !== undefined ? parseFloat(itemKeys["qty"]) : null;
+
+//       console.log(
+//         `Row ${index + 2}: SKU = ${sku}, Description = ${description}`
+//       );
+
+//       if (!sku || !description) {
+//         skippedRows.push({
+//           row: index + 2,
+//           item,
+//           reason: `Missing SKU or Description`,
+//         });
+//         continue;
+//       }
+
+//       await connection.query(
+//         `INSERT INTO items (
+//           sku, description, item_type, search_description, unit_of_measure, price, color,qty,
+//           weight, cube, cw, gr, se, sw
+//         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)`,
+//         [
+//           sku,
+//           description,
+//           item_type,
+//           search_description,
+//           unit_of_measure,
+//           price,
+//           color,
+//           qty,
+//           null,
+//           null,
+//           null,
+//           null,
+//           null,
+//           null,
+//         ]
+//       );
+//     }
+
+//     await connection.commit();
+
+//     res.json({
+//       message: "Data imported successfully",
+//       skippedRows,
+//     });
+//   } catch (err) {
+//     console.error("Error importing data:", err);
+//     if (connection) {
+//       await connection.rollback();
+//     }
+//     res
+//       .status(500)
+//       .json({ error: "Failed to import data", details: err.message });
+//   } finally {
+//     if (connection) {
+//       connection.release(); // Return connection to the pool
+//     }
+//   }
+// });
+
+
+
+// Endpoint to import items from uploaded Excel file
+
+const excelupload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10000000 }, // 10MB limit
+  fileFilter(req, file, cb) {
+    if (
+      !file.mimetype.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') &&
+      !file.mimetype.includes('application/vnd.ms-excel')
+    ) {
+      return cb(new Error('Only Excel files (.xlsx, .xls) are supported'));
+    }
+    cb(null, true);
+  },
+});
+
+
+
+
+
+app.post('/api/admin/import-items', adminauthenticateToken, excelupload.single('file'), async (req, res) => {
   let connection;
 
   try {
-    // Get a connection from the pool
+    // Get database connection
     connection = await pool.getConnection();
 
-    // Read Excel file (adjust file path as needed)
-    const filePath = "SSC MASTER LIST.xlsx";
-    const workbook = XLSX.readFile(filePath);
+    // Check if file was uploaded
+    if (!req.file) {
+      throw new Error('No Excel file was uploaded');
+    }
+
+    // Read Excel file from buffer
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(sheet);
 
     if (data.length === 0) {
-      throw new Error("Excel file is empty or has no data rows");
+      throw new Error('Excel file is empty or has no data rows');
     }
 
-    console.log("Excel headers:", Object.keys(data[0]));
+    console.log('Excel headers:', Object.keys(data[0]));
 
     let skippedRows = [];
 
-    await connection.beginTransaction();
+    try {
+      await connection.beginTransaction();
 
-    for (const [index, item] of data.entries()) {
-      // Normalize keys
-      const itemKeys = Object.keys(item).reduce((acc, key) => {
-        acc[key.toLowerCase().trim()] = item[key];
-        return acc;
-      }, {});
+      for (const [index, item] of data.entries()) {
+        // Normalize keys to lowercase and trim
+        const itemKeys = Object.keys(item).reduce((acc, key) => {
+          acc[key.toLowerCase()] = typeof item[key] === 'string' ? item[key].trim() : item[key];
+          return acc;
+        }, {});
 
-      // Map fields
-      const sku = itemKeys["no"] ? String(itemKeys["no"]).trim() : null;
-      const description = itemKeys["description"]
-        ? String(itemKeys["description"]).trim()
-        : null;
-      const color = itemKeys["color"] ? String(itemKeys["color"]).trim() : null;
-      const item_type = itemKeys["description 2"]
-        ? String(itemKeys["description 2"]).trim()
-        : "STAINED PLYWOOD";
-      const search_description = itemKeys["search description"]
-        ? String(itemKeys["search description"]).trim()
-        : null;
-      const unit_of_measure = itemKeys["base unit of measure"]
-        ? String(itemKeys["base unit of measure"]).trim()
-        : "NOS";
-      const price =
-        itemKeys["unit price"] !== undefined
-          ? parseFloat(itemKeys["unit price"])
-          : null;
+        // Map fields to database columns
+        const sku = itemKeys['no'] ? String(itemKeys['no']).trim() : null;
+        const description = itemKeys['description'] ? String(itemKeys['description']).trim() : null;
+        const color = itemKeys['color'] ? String(itemKeys['color']).trim() : null;
+        const item_type = itemKeys['description 2'] ? String(itemKeys['description 2']).trim() : 'STAINED ITEMS';
+        const search_description = itemKeys['item name'] ? String(itemKeys['item name']).trim() : null;
+        const unit_of_measure = itemKeys['base unit of measure'] ? String(itemKeys['base unit of measure']).trim() : 'Each';
+        const price = itemKeys['unit price'] !== undefined ? parseFloat(itemKeys['unit price']) : null;
+        const qty = itemKeys['qty'] !== undefined ? parseFloat(itemKeys['qty']) : 0;
 
-      console.log(
-        `Row ${index + 2}: SKU = ${sku}, Description = ${description}`
-      );
+        console.log(
+          `Row ${index + 2}: SKU=${sku}, Description=${description}, Color=${color}, Item Type=${item_type}, Search Description=${search_description}, Unit of Measure=${unit_of_measure}, Price=${price}, Qty=${qty}`
+        );
 
-      if (!sku || !description) {
-        skippedRows.push({
-          row: index + 2,
-          item,
-          reason: `Missing SKU or Description`,
-        });
-        continue;
+        if (!sku || !description) {
+          skippedRows.push({
+            row: index + 2,
+            item,
+            reason: `Missing SKU or Description`,
+          });
+          continue;
+        }
+
+        // Insert into items table
+        await connection.query(
+          `INSERT INTO items (
+            sku, description, item_type, search_description, unit_of_measure, price, color, qty,
+            weight, cube, cw, gr, se, sw
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            sku,
+            description,
+            item_type,
+            search_description,
+            unit_of_measure,
+            price,
+            color,
+            qty,
+            null, // weight
+            null, // cube
+            null, // cw
+            null, // gr
+            null, // se
+            null, // sw
+          ]
+        );
       }
 
-      await connection.query(
-        `INSERT INTO items (
-          sku, description, item_type, search_description, unit_of_measure, price, color,
-          weight, cube, cw, gr, se, sw
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          sku,
-          description,
-          item_type,
-          search_description,
-          unit_of_measure,
-          price,
-          color,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-        ]
-      );
-    }
+      await connection.commit();
 
-    await connection.commit();
-
-    res.json({
-      message: "Data imported successfully",
-      skippedRows,
-    });
-  } catch (err) {
-    console.error("Error importing data:", err);
-    if (connection) {
-      await connection.rollback();
+      res.json({
+        message: 'Data imported successfully',
+        skippedRows,
+      });
+    } catch (err) {
+      console.error('Error importing data:', err);
+      if (connection) {
+        await connection.rollback();
+      }
+      res.status(500).json({ error: 'Failed to import data', details: err.message });
     }
-    res
-      .status(500)
-      .json({ error: "Failed to import data", details: err.message });
+  } catch (error) {
+    console.error('Error reading file or opening connection:', error.message);
+    res.status(500).json({ error: error.message });
   } finally {
     if (connection) {
-      connection.release(); // Return connection to the pool
+      connection.release();
     }
   }
 });
 
-app.get("/api/invoice/profile", adminauthenticateToken, async (req, res) => {
-  try {
-    const customerId = req.query.customer_id;
-    if (!customerId) {
-      return res.status(400).json({ error: "customer_id is required" });
-    }
 
-    const [users] = await pool.query(
-      "SELECT id, full_name, email, phone, created_at, last_login, account_status, is_active, company_name, address, admin_discount, updated_at FROM users WHERE user_type = 'customer' AND id = ?",
-      [customerId]
-    );
 
-    if (users.length === 0) {
-      return res.status(404).json({ error: "Customer not found" });
-    }
 
-    const user = users[0];
-    res.json({
-      id: user.id,
-      fullName: user.full_name,
-      email: user.email,
-      phone: user.phone,
-      joinDate: user.created_at,
-      lastLogin: user.last_login || null,
-      account_status: user.account_status,
-      is_active: user.is_active,
-      company_name: user.company_name,
-      address: user.address,
-      admin_discount: user.admin_discount,
-      updated_at: user.updated_at,
-    });
-  } catch (err) {
-    console.error("Server error:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
 
-app.get("/api/admin/invoices", adminauthenticateToken, async (req, res) => {
-  try {
-    // Fetch all invoices with order details
-    const [invoices] = await pool.query(
-      `SELECT i.*, o.id AS order_internal_id, o.order_id, o.bill_to, o.account
-       FROM invoices i
-       LEFT JOIN orders o ON i.order_id = o.id`
-    );
-
-    // Fetch all order items for the invoices
-    const orderIds = invoices
-      .map((invoice) => invoice.order_internal_id)
-      .filter((id) => id);
-    let items = [];
-    if (orderIds.length > 0) {
-      const [orderItems] = await pool.query(
-        `SELECT oi.order_id, oi.sku, oi.name, oi.quantity, oi.door_style, oi.finish, oi.price, oi.total_amount
-         FROM order_items oi
-         WHERE oi.order_id IN (?)`,
-        [orderIds]
-      );
-      items = orderItems;
-    }
-
-    // Associate items with their respective invoices
-    const invoicesWithItems = invoices.map((invoice) => ({
-      id: invoice.id,
-      invoice_number: invoice.invoice_number,
-      order_id: invoice.order_id, // String order_id from orders table (e.g., "S-ORD101127")
-      customer_id: invoice.user_id, // Map user_id to customer_id for frontend
-      issue_date: invoice.issue_date,
-      subtotal: parseFloat(invoice.subtotal) || 0,
-      tax: parseFloat(invoice.tax) || 0,
-      shipping: invoice.shipping !== null ? parseFloat(invoice.shipping) : null,
-      discount: parseFloat(invoice.discount) || 0,
-      additional_discount: parseFloat(invoice.additional_discount) || 0,
-      total: parseFloat(invoice.total) || 0,
-      items: items
-        .filter((item) => item.order_id === invoice.order_internal_id)
-        .map((item) => ({
-          sku: item.sku,
-          name: item.name,
-          quantity: item.quantity,
-          door_style: item.door_style || null,
-          finish: item.finish || null,
-          price: parseFloat(item.price) || 0,
-          total_amount: parseFloat(item.total_amount) || 0,
-        })),
-      bill_to: invoice.bill_to || null,
-      account: invoice.account || null,
-      finish_type: invoice.finish_type || null,
-      door_style: invoice.door_style || null,
-    }));
-
-    res.json(invoicesWithItems);
-  } catch (err) {
-    console.error("Server error:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// GET /api/admin/products - Fetch all products
-app.get("/api/admin/products", adminauthenticateToken, async (req, res) => {
-  try {
-    const [products] = await pool.query(
-      `SELECT id, name, item_type, color, photo_path, is_visible, created_at, updated_at
-       FROM products`
-    );
-    res.json(
-      products.map((product) => ({
-        id: product.id,
-        name: product.name,
-        item_type: product.item_type,
-        color: product.color,
-        photo_path: product.photo_path
-          ? `${req.protocol}://${req.get("host")}${product.photo_path}`
-          : null,
-        is_visible: product.is_visible,
-        created_at: product.created_at,
-        updated_at: product.updated_at,
-      }))
-    );
-  } catch (err) {
-    console.error("Server error:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// GET /api/admin/products/filters - Fetch unique item_type and color values
-app.get(
-  "/api/admin/products/filters",
-  adminauthenticateToken,
-  async (req, res) => {
-    try {
-      const [itemTypes] = await pool.query(
-        `SELECT DISTINCT item_type FROM products`
-      );
-      const [colors] = await pool.query(`SELECT DISTINCT color FROM products`);
-      res.json({
-        item_types: itemTypes.map((row) => row.item_type),
-        colors: colors.map((row) => row.color),
-      });
-    } catch (err) {
-      console.error("Server error:", err);
-      res.status(500).json({ error: "Server error" });
-    }
-  }
-);
-
-// POST /api/admin/products - Add a new product
-app.post(
-  "/api/admin/products",
-  adminauthenticateToken,
-  upload.single("photo"),
-  async (req, res) => {
-    try {
-      const { name, item_type, color } = req.body;
-      if (!name || !item_type || !color) {
-        return res
-          .status(400)
-          .json({ error: "All required fields must be provided" });
-      }
-
-      const photo_path = req.file ? `/Uploads/${req.file.filename}` : null;
-      const is_visible = req.body.is_visible === "true" ? 1 : 0;
-
-      const [result] = await pool.query(
-        `INSERT INTO products (name, item_type, color, photo_path, is_visible)
-       VALUES (?, ?, ?, ?, ?)`,
-        [name, item_type, color, photo_path, is_visible]
-      );
-
-      res.json({
-        id: result.insertId,
-        name,
-        item_type,
-        color,
-        photo_path: photo_path
-          ? `${req.protocol}://${req.get("host")}${photo_path}`
-          : null,
-        is_visible,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-    } catch (err) {
-      console.error("Server error:", err);
-      res.status(500).json({ error: err.message || "Server error" });
-    }
-  }
-);
 
 // PUT /api/admin/products/:id - Update a product
-app.put(
-  "/api/admin/products/:id",
+app.put("/api/admin/products/:id",
   adminauthenticateToken,
   upload.single("photo"),
   async (req, res) => {
@@ -5319,8 +6396,7 @@ app.put(
 );
 
 // DELETE /api/admin/products/:id - Delete a product
-app.delete(
-  "/api/admin/products/:id",
+app.delete( "/api/admin/products/:id",
   adminauthenticateToken,
   async (req, res) => {
     try {
@@ -5340,8 +6416,7 @@ app.delete(
 );
 
 // Get all messages for all vendors (admin view)
-app.get(
-  "/api/admin/vendors/messages",
+app.get("/api/admin/vendors/messages",
   adminauthenticateToken,
   async (req, res) => {
     const connection = await pool.getConnection();
@@ -5361,8 +6436,7 @@ app.get(
 );
 
 // Send a reply to a specific vendor
-app.post(
-  "/api/admin/vendors/:vendorId/messages",
+app.post("/api/admin/vendors/:vendorId/messages",
   adminauthenticateToken,
   async (req, res) => {
     const { vendorId } = req.params;
@@ -5597,8 +6671,7 @@ app.get("/api/admin/rfqs/:id", adminauthenticateToken, async (req, res) => {
   }
 });
 
-app.put(
-  "/api/admin/rfqs/:id/quote/:quote_id/accept",
+app.put("/api/admin/rfqs/:id/quote/:quote_id/accept",
   adminauthenticateToken,
   async (req, res) => {
     const connection = await pool.getConnection();
@@ -5694,8 +6767,7 @@ app.put(
   }
 );
 
-app.put(
-  "/api/admin/rfqs/:id/quote/:quote_id/reject",
+app.put("/api/admin/rfqs/:id/quote/:quote_id/reject",
   adminauthenticateToken,
   async (req, res) => {
     const { rejection_reason } = req.body;
@@ -5755,6 +6827,70 @@ app.put(
     }
   }
 );
+
+
+
+app.get("/api/admin/invoices", adminauthenticateToken, async (req, res) => {
+  try {
+    // Fetch all invoices with order details
+    const [invoices] = await pool.query(
+      `SELECT i.*, o.id AS order_internal_id, o.order_id, o.bill_to, o.account
+       FROM invoices i
+       LEFT JOIN orders o ON i.order_id = o.id`
+    );
+
+    // Fetch all order items for the invoices
+    const orderIds = invoices
+      .map((invoice) => invoice.order_internal_id)
+      .filter((id) => id);
+    let items = [];
+    if (orderIds.length > 0) {
+      const [orderItems] = await pool.query(
+        `SELECT oi.order_id, oi.sku, oi.name, oi.quantity, oi.door_style, oi.finish, oi.price, oi.total_amount
+         FROM order_items oi
+         WHERE oi.order_id IN (?)`,
+        [orderIds]
+      );
+      items = orderItems;
+    }
+
+    // Associate items with their respective invoices
+    const invoicesWithItems = invoices.map((invoice) => ({
+      id: invoice.id,
+      invoice_number: invoice.invoice_number,
+      order_id: invoice.order_id, // String order_id from orders table (e.g., "S-ORD101127")
+      customer_id: invoice.user_id, // Map user_id to customer_id for frontend
+      issue_date: invoice.issue_date,
+      subtotal: parseFloat(invoice.subtotal) || 0,
+      tax: parseFloat(invoice.tax) || 0,
+      shipping: invoice.shipping !== null ? parseFloat(invoice.shipping) : null,
+      discount: parseFloat(invoice.discount) || 0,
+      additional_discount: parseFloat(invoice.additional_discount) || 0,
+      total: parseFloat(invoice.total) || 0,
+      items: items
+        .filter((item) => item.order_id === invoice.order_internal_id)
+        .map((item) => ({
+          sku: item.sku,
+          name: item.name,
+          quantity: item.quantity,
+          door_style: item.door_style || null,
+          finish: item.finish || null,
+          price: parseFloat(item.price) || 0,
+          total_amount: parseFloat(item.total_amount) || 0,
+        })),
+      bill_to: invoice.bill_to || null,
+      account: invoice.account || null,
+      finish_type: invoice.finish_type || null,
+      door_style: invoice.door_style || null,
+    }));
+
+    res.json(invoicesWithItems);
+  } catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 
 //-----------------------------------------------------------------------Vendor API Endpoints-----------------------------------------------------------------------
 
@@ -7979,5 +9115,3 @@ app.post("/api/vendor/reset-password", async (req, res) => {
 app.listen(port, "0.0.0.0", () => {
   console.log(`Server running on http://0.0.0.0:${port}`);
 });
-
-
