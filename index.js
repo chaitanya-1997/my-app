@@ -249,7 +249,7 @@ app.post("/api/signup", async (req, res) => {
     // Send notification email to admin
     const adminMailOptions = {
       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-      to: "aashish.shroff@zeta-v.com",
+      to: "sjingle@studiosignaturecabinets.com",
       subject: `New ${
         userType.charAt(0).toUpperCase() + userType.slice(1)
       } Signup Request - ${fullName}`,
@@ -925,7 +925,7 @@ app.get("/api/orders/next-id", async (req, res) => {
 
 //       const adminMailOptions = {
 //         from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-//         to: "aashish.shroff@zeta-v.com",
+//         to: "sjingle@studiosignaturecabinets.com",
 //         subject: `New Order Pending Approval - ${orderId}`,
 //         html: `
 //           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -1251,7 +1251,7 @@ app.get("/api/orders/next-id", async (req, res) => {
 
 //       const adminMailOptions = {
 //         from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-//         to: "aashish.shroff@zeta-v.com",
+//         to: "sjingle@studiosignaturecabinets.com",
 //         subject: `New Order Pending Approval - ${orderId}`,
 //         html: `
 //           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -1604,7 +1604,7 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
 
     const adminMailOptions = {
       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-      to: "aashish.shroff@zeta-v.com",
+      to: "sjingle@studiosignaturecabinets.com",
       subject: `New Order Pending Approval - ${orderId}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -2035,7 +2035,7 @@ app.put("/api/orders/:id", authenticateToken, async (req, res) => {
       // Admin email
       const adminMailOptions = {
         from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-        to: "aashish.shroff@zeta-v.com",
+        to: "sjingle@studiosignaturecabinets.com",
         subject: `Order Updated - ${orderId}`,
         html: `
           <h2>Order ID: ${orderId}</h2>
@@ -2290,7 +2290,7 @@ app.put("/api/orders/:id/cancel", authenticateToken, async (req, res) => {
     // Admin Email
     const adminMailOptions = {
       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-      to: "aashish.shroff@zeta-v.com",
+      to: "sjingle@studiosignaturecabinets.com",
       subject: `Order Canceled - ${orderId}`,
       html: `
         <h2>Order ID: ${orderId}</h2>
@@ -2638,7 +2638,7 @@ app.post("/api/contact", authenticateToken, async (req, res) => {
     // Send email to admin
     const mailOptions = {
       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-      to: "aashish.shroff@zeta-v.com", // Admin email
+      to: "sjingle@studiosignaturecabinets.com", // Admin email
       subject: `New Contact Form Submission: ${subject}`,
       html: `
         <h3>New Contact Message</h3>
@@ -2979,7 +2979,7 @@ app.post("/api/admin/register", async (req, res) => {
     // Send notification email to super admin
     const superAdminMailOptions = {
       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-      to: "aashish.shroff@zeta-v.com",
+      to: "sjingle@studiosignaturecabinets.com",
       subject: `New Admin Registration - ${fullName}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
