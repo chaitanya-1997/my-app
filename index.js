@@ -132,6 +132,191 @@ const generateInvoiceNumber = async () => {
 
 //Signup API
 
+// app.post("/api/signup", async (req, res) => {
+//   const {
+//     userType,
+//     fullName,
+//     email,
+//     password,
+//     confirmPassword,
+//     businessName,
+//     taxId,
+//     phone,
+//     address,
+//     agreeTerms,
+//   } = req.body;
+
+//   // Validation
+//   if (!userType || !["customer", "vendor"].includes(userType)) {
+//     return res.status(400).json({ error: "Invalid user type" });
+//   }
+//   if (!fullName || !email || !password || !confirmPassword) {
+//     return res.status(400).json({ error: "Missing required fields" });
+//   }
+//   if (password !== confirmPassword) {
+//     return res.status(400).json({ error: "Passwords do not match" });
+//   }
+//   if (!agreeTerms) {
+//     return res.status(400).json({ error: "You must agree to the terms" });
+//   }
+//   if (userType === "vendor" && (!businessName || !taxId)) {
+//     return res
+//       .status(400)
+//       .json({ error: "Business name and tax ID are required for vendors" });
+//   }
+
+//   try {
+//     // Check if email already exists
+//     const [existingUsers] = await pool.query(
+//       "SELECT id FROM users WHERE email = ?",
+//       [email]
+//     );
+//     if (existingUsers.length > 0) {
+//       return res.status(400).json({ error: "Email already exists" });
+//     }
+
+//     // Check if email already exists for the same userType
+//     // const [existingUsers] = await pool.query(
+//     //   "SELECT id FROM users WHERE email = ? AND user_type = ?",
+//     //   [email, userType]
+//     // );
+
+//     // if (existingUsers.length > 0) {
+//     //   return res
+//     //     .status(400)
+//     //     .json({ error: `An account with this email already exists as a ${userType}.` });
+//     // }
+
+//     // Hash password
+//     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+
+//     // Insert user into database
+//     const [result] = await pool.query(
+//       `INSERT INTO users (user_type, full_name, email, password, company_name, tax_id, phone, address, is_active, created_at)
+//        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+//       [
+//         userType,
+//         fullName,
+//         email,
+//         hashedPassword,
+//         businessName || null,
+//         taxId || null,
+//         phone || null,
+//         address || null,
+//         0, // is_active = 0 (pending approval)
+//       ]
+//     );
+
+//     // Get the inserted user's ID
+//     const userId = result.insertId;
+
+//     // Send confirmation email to the user
+//     const userMailOptions = {
+//       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//       to: email,
+//       subject: "Thank You for Signing Up with Studio Signature Cabinets!",
+//       html: `
+//         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//           <h2>Hello, ${fullName}!</h2>
+//           <p>Thank you for signing up as a <strong>${userType}</strong> with Studio Signature Cabinets. Your account is currently <strong>pending approval</strong> by our admin team.</p>
+//           <p><strong>What happens next?</strong></p>
+//           <ul>
+//             <li>Our team will review your signup details within the next 1-2 business days.</li>
+//             <li>Once approved, you will receive a confirmation email with instructions to log in and access your account.</li>
+//             <li>If you have any urgent questions, please contact our support team at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</li>
+//           </ul>
+//           <h3>Your Signup Details:</h3>
+//           <ul style="list-style: none; padding: 0;">
+//             <li><strong>Full Name:</strong> ${fullName}</li>
+//             <li><strong>Email:</strong> ${email}</li>
+//             <li><strong>Phone:</strong> ${phone || "N/A"}</li>
+//             <li><strong>Address:</strong> ${address || "N/A"}</li>
+//             ${
+//               userType === "vendor"
+//                 ? `
+//               <li><strong>Business Name:</strong> ${businessName}</li>
+//               <li><strong>Tax ID:</strong> ${taxId}</li>
+//             `
+//                 : ""
+//             }
+//           </ul>
+//           <p>We’re excited to have you join our community! You’ll hear from us soon.</p>
+//           <p>Best regards,<br>Team Studio Signature Cabinets</p>
+//         </div>
+//       `,
+//     };
+
+//     // Send notification email to admin
+//     const adminMailOptions = {
+//       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+//       to: "sjingle@studiosignaturecabinets.com",
+//       subject: `New ${
+//         userType.charAt(0).toUpperCase() + userType.slice(1)
+//       } Signup Request - ${fullName}`,
+//       html: `
+//         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+//           <h2>New ${
+//             userType.charAt(0).toUpperCase() + userType.slice(1)
+//           } Signup Request</h2>
+//           <p>A new ${userType} has submitted a signup request on ${new Date().toLocaleDateString()}. Please review and approve or reject this user in the admin panel.</p>
+//           <h3>User Details:</h3>
+//           <ul style="list-style: none; padding: 0;">
+//             <li><strong>User ID:</strong> ${userId}</li>
+//             <li><strong>User Type:</strong> ${
+//               userType.charAt(0).toUpperCase() + userType.slice(1)
+//             }</li>
+//             <li><strong>Full Name:</strong> ${fullName}</li>
+//             <li><strong>Email:</strong> ${email}</li>
+//             <li><strong>Phone:</strong> ${phone || "N/A"}</li>
+//             <li><strong>Address:</strong> ${address || "N/A"}</li>
+//             ${
+//               userType === "vendor"
+//                 ? `
+//               <li><strong>Business Name:</strong> ${businessName}</li>
+//               <li><strong>Tax ID:</strong> ${taxId}</li>
+//             `
+//                 : ""
+//             }
+//             <li><strong>Signup Date:</strong> ${new Date().toLocaleDateString()}</li>
+//             <li><strong>Status:</strong> Pending Approval</li>
+//           </ul>
+//           <p><strong>Action Required:</strong> Please review this user and update their status in the admin panel.</p>
+//           <p style="text-align: center;">
+//             <a href="https://studiosignaturecabinets.com/admin/login" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Review User</a>
+//           </p>
+//           <p>For further details, check the admin panel or contact the user directly at ${email}.</p>
+//         </div>
+//       `,
+//     };
+
+//     // Send emails with error handling
+//     try {
+//       await Promise.all([
+//         transporter.sendMail(userMailOptions),
+//         transporter.sendMail(adminMailOptions),
+//       ]);
+//     } catch (emailErr) {
+//       console.error("Email sending failed:", emailErr);
+//       // Log error but don't fail signup
+//       res.status(201).json({
+//         message:
+//           "Account created successfully, but email sending failed. Please contact support.",
+//       });
+//       return;
+//     }
+
+//     // Respond success
+//     res.status(201).json({
+//       message:
+//         "Signup request submitted successfully. You will receive a confirmation email once your account is approved.",
+//     });
+//   } catch (err) {
+//     console.error("Server error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+
 app.post("/api/signup", async (req, res) => {
   const {
     userType,
@@ -139,34 +324,74 @@ app.post("/api/signup", async (req, res) => {
     email,
     password,
     confirmPassword,
-    businessName,
+    businessName, 
     taxId,
     phone,
-    address,
+    street,
+    city,
+    state,
+    postalCode,
     agreeTerms,
   } = req.body;
 
-  // Validation
+  // Validate userType
   if (!userType || !["customer", "vendor"].includes(userType)) {
     return res.status(400).json({ error: "Invalid user type" });
   }
+  
+  // Required fields
   if (!fullName || !email || !password || !confirmPassword) {
     return res.status(400).json({ error: "Missing required fields" });
   }
+  
   if (password !== confirmPassword) {
     return res.status(400).json({ error: "Passwords do not match" });
   }
+  
   if (!agreeTerms) {
     return res.status(400).json({ error: "You must agree to the terms" });
   }
+  
   if (userType === "vendor" && (!businessName || !taxId)) {
-    return res
-      .status(400)
-      .json({ error: "Business name and tax ID are required for vendors" });
+    return res.status(400).json({
+      error: "Company name and tax ID are required for vendors",
+    });
+  }
+  
+  // Basic check for address fields presence
+  if (!street || !city || !state || !postalCode) {
+    return res.status(400).json({
+      error: "Please provide complete address: street, city, state, and postal code",
+    });
+  }
+  
+  // Email validation (simple)
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || /\s/.test(email)) {
+    return res.status(400).json({ error: "Invalid email format" });
+  }
+  
+  // Password validation (same rules as frontend)
+  if (
+    !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/.test(
+      password
+    ) || /\s/.test(password)
+  ) {
+    return res.status(400).json({
+      error:
+        "Password must be at least 8 characters long and include uppercase, lowercase, number, special character, and no spaces",
+    });
+  }
+  
+  // Phone validation: allowing + and other characters, but exactly 10 digits
+  const digitsOnly = phone.replace(/[^\d]/g, "");
+  if (!/^\d{10}$/.test(digitsOnly)) {
+    return res.status(400).json({
+      error: "Phone number must contain exactly 10 digits",
+    });
   }
 
   try {
-    // Check if email already exists
+    // Check for duplicate email in DB
     const [existingUsers] = await pool.query(
       "SELECT id FROM users WHERE email = ?",
       [email]
@@ -175,42 +400,33 @@ app.post("/api/signup", async (req, res) => {
       return res.status(400).json({ error: "Email already exists" });
     }
 
-    // Check if email already exists for the same userType
-    // const [existingUsers] = await pool.query(
-    //   "SELECT id FROM users WHERE email = ? AND user_type = ?",
-    //   [email, userType]
-    // );
-
-    // if (existingUsers.length > 0) {
-    //   return res
-    //     .status(400)
-    //     .json({ error: `An account with this email already exists as a ${userType}.` });
-    // }
-
     // Hash password
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
-    // Insert user into database
+    // Insert into DB - using company_name for the single business/company field
     const [result] = await pool.query(
-      `INSERT INTO users (user_type, full_name, email, password, company_name, tax_id, phone, address, is_active, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      `INSERT INTO users 
+      (user_type, full_name, email, password, company_name, tax_id, phone, street, city, state, postal_code, is_active, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         userType,
         fullName,
         email,
         hashedPassword,
-        businessName || null,
+        businessName || null, // Store in company_name column
         taxId || null,
         phone || null,
-        address || null,
-        0, // is_active = 0 (pending approval)
+        street || null,
+        city || null,
+        state || null,
+        postalCode || null,
+        0, // pending approval
       ]
     );
 
-    // Get the inserted user's ID
     const userId = result.insertId;
 
-    // Send confirmation email to the user
+    // Prepare user confirmation email
     const userMailOptions = {
       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
       to: email,
@@ -221,7 +437,7 @@ app.post("/api/signup", async (req, res) => {
           <p>Thank you for signing up as a <strong>${userType}</strong> with Studio Signature Cabinets. Your account is currently <strong>pending approval</strong> by our admin team.</p>
           <p><strong>What happens next?</strong></p>
           <ul>
-            <li>Our team will review your signup details within the next 1-2 business days.</li>
+            <li>Our team will review your signup details within 1-2 business days.</li>
             <li>Once approved, you will receive a confirmation email with instructions to log in and access your account.</li>
             <li>If you have any urgent questions, please contact our support team at <a href="mailto:info@studiosignaturecabinets.com">info@studiosignaturecabinets.com</a>.</li>
           </ul>
@@ -230,53 +446,41 @@ app.post("/api/signup", async (req, res) => {
             <li><strong>Full Name:</strong> ${fullName}</li>
             <li><strong>Email:</strong> ${email}</li>
             <li><strong>Phone:</strong> ${phone || "N/A"}</li>
-            <li><strong>Address:</strong> ${address || "N/A"}</li>
-            ${
-              userType === "vendor"
-                ? `
-              <li><strong>Business Name:</strong> ${businessName}</li>
-              <li><strong>Tax ID:</strong> ${taxId}</li>
-            `
-                : ""
-            }
+            <li><strong>Street:</strong> ${street || "N/A"}</li>
+            <li><strong>City:</strong> ${city || "N/A"}</li>
+            <li><strong>State:</strong> ${state || "N/A"}</li>
+            <li><strong>Postal Code:</strong> ${postalCode || "N/A"}</li>
+            ${businessName ? `<li><strong>Company Name:</strong> ${businessName}</li>` : ""}
+            ${userType === "vendor" && taxId ? `<li><strong>Tax ID:</strong> ${taxId}</li>` : ""}
           </ul>
-          <p>We’re excited to have you join our community! You’ll hear from us soon.</p>
+          <p>We're excited to have you join our community! You'll hear from us soon.</p>
           <p>Best regards,<br>Team Studio Signature Cabinets</p>
         </div>
       `,
     };
 
-    // Send notification email to admin
+    // Admin notification email
     const adminMailOptions = {
       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-      to: "sjingle@studiosignaturecabinets.com",
-      subject: `New ${
-        userType.charAt(0).toUpperCase() + userType.slice(1)
-      } Signup Request - ${fullName}`,
+      to: "aashish.shroff@zeta-v.com",
+      subject: `New ${userType.charAt(0).toUpperCase() + userType.slice(1)} Signup Request - ${fullName}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2>New ${
-            userType.charAt(0).toUpperCase() + userType.slice(1)
-          } Signup Request</h2>
+          <h2>New ${userType.charAt(0).toUpperCase() + userType.slice(1)} Signup Request</h2>
           <p>A new ${userType} has submitted a signup request on ${new Date().toLocaleDateString()}. Please review and approve or reject this user in the admin panel.</p>
           <h3>User Details:</h3>
           <ul style="list-style: none; padding: 0;">
             <li><strong>User ID:</strong> ${userId}</li>
-            <li><strong>User Type:</strong> ${
-              userType.charAt(0).toUpperCase() + userType.slice(1)
-            }</li>
+            <li><strong>User Type:</strong> ${userType.charAt(0).toUpperCase() + userType.slice(1)}</li>
             <li><strong>Full Name:</strong> ${fullName}</li>
             <li><strong>Email:</strong> ${email}</li>
             <li><strong>Phone:</strong> ${phone || "N/A"}</li>
-            <li><strong>Address:</strong> ${address || "N/A"}</li>
-            ${
-              userType === "vendor"
-                ? `
-              <li><strong>Business Name:</strong> ${businessName}</li>
-              <li><strong>Tax ID:</strong> ${taxId}</li>
-            `
-                : ""
-            }
+            <li><strong>Street:</strong> ${street || "N/A"}</li>
+            <li><strong>City:</strong> ${city || "N/A"}</li>
+            <li><strong>State:</strong> ${state || "N/A"}</li>
+            <li><strong>Postal Code:</strong> ${postalCode || "N/A"}</li>
+            ${businessName ? `<li><strong>Company Name:</strong> ${businessName}</li>` : ""}
+            ${userType === "vendor" && taxId ? `<li><strong>Tax ID:</strong> ${taxId}</li>` : ""}
             <li><strong>Signup Date:</strong> ${new Date().toLocaleDateString()}</li>
             <li><strong>Status:</strong> Pending Approval</li>
           </ul>
@@ -289,7 +493,7 @@ app.post("/api/signup", async (req, res) => {
       `,
     };
 
-    // Send emails with error handling
+    // Send emails
     try {
       await Promise.all([
         transporter.sendMail(userMailOptions),
@@ -297,15 +501,12 @@ app.post("/api/signup", async (req, res) => {
       ]);
     } catch (emailErr) {
       console.error("Email sending failed:", emailErr);
-      // Log error but don't fail signup
-      res.status(201).json({
+      return res.status(201).json({
         message:
           "Account created successfully, but email sending failed. Please contact support.",
       });
-      return;
     }
 
-    // Respond success
     res.status(201).json({
       message:
         "Signup request submitted successfully. You will receive a confirmation email once your account is approved.",
@@ -315,6 +516,7 @@ app.post("/api/signup", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 // Login API
 
@@ -460,11 +662,12 @@ app.get("/api/verify-token", authenticateToken, async (req, res) => {
 
 // Get User Profile API
 
+
 // app.get("/api/profile", authenticateToken, async (req, res) => {
 //   try {
 //     const userId = req.user.id;
 //     const [users] = await pool.query(
-//       "SELECT id, user_type, full_name, company_name, email, phone, address, account_status, last_login, admin_discount,created_at FROM users WHERE id = ?",
+//       "SELECT id, user_type, full_name, company_name, email, phone, address, account_status, last_login, admin_discount, created_at, notes FROM users WHERE id = ?",
 //       [userId]
 //     );
 
@@ -479,11 +682,70 @@ app.get("/api/verify-token", authenticateToken, async (req, res) => {
 //   }
 // });
 
+// // Update User Profile API
+// app.put("/api/profile", authenticateToken, async (req, res) => {
+//   const { full_name, email, phone, company_name, address } = req.body;
+//   const userId = req.user.id;
+
+//   try {
+//     // Validate input
+//     if (!full_name || !email) {
+//       return res
+//         .status(400)
+//         .json({ error: "Full name and email are required" });
+//     }
+
+//     // Check if email is already in use by another user
+//     const [existingUsers] = await pool.query(
+//       "SELECT id FROM users WHERE email = ? AND id != ?",
+//       [email, userId]
+//     );
+//     if (existingUsers.length > 0) {
+//       return res.status(400).json({ error: "Email is already in use" });
+//     }
+
+//     // Update user details
+//     await pool.query(
+//       `UPDATE users 
+//        SET full_name = ?, email = ?, phone = ?, company_name = ?, address = ?
+//        WHERE id = ?`,
+//       [
+//         full_name,
+//         email,
+//         phone || null,
+//         company_name || null,
+//         address || null,
+//         userId,
+//       ]
+//     );
+
+//     // Fetch updated user data
+//     const [updatedUsers] = await pool.query(
+//       "SELECT id, user_type, full_name, company_name, email, phone, address, account_status, last_login, created_at FROM users WHERE id = ?",
+//       [userId]
+//     );
+
+//     if (updatedUsers.length === 0) {
+//       return res.status(404).json({ error: "User not found" });
+//     }
+
+//     res.json({
+//       message: "Profile updated successfully",
+//       user: updatedUsers[0],
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+
+// GET /api/profile
 app.get("/api/profile", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const [users] = await pool.query(
-      "SELECT id, user_type, full_name, company_name, email, phone, address, account_status, last_login, admin_discount, created_at, notes FROM users WHERE id = ?",
+      "SELECT id, user_type, full_name, company_name, email, phone, street, city, state, postal_code, account_status, last_login, admin_discount, created_at, notes, profile_photo FROM users WHERE id = ?",
       [userId]
     );
 
@@ -498,10 +760,11 @@ app.get("/api/profile", authenticateToken, async (req, res) => {
   }
 });
 
-// Update User Profile API
-app.put("/api/profile", authenticateToken, async (req, res) => {
-  const { full_name, email, phone, company_name, address } = req.body;
+// PUT /api/profile
+app.put("/api/profile", authenticateToken, upload.single("profile_photo"), async (req, res) => {
+  const { full_name, email, phone, company_name, street, city, state, postal_code } = req.body;
   const userId = req.user.id;
+  const profilePhoto = req.file ? `/uploads/${req.file.filename}` : null;
 
   try {
     // Validate input
@@ -523,21 +786,25 @@ app.put("/api/profile", authenticateToken, async (req, res) => {
     // Update user details
     await pool.query(
       `UPDATE users 
-       SET full_name = ?, email = ?, phone = ?, company_name = ?, address = ?
+       SET full_name = ?, email = ?, phone = ?, company_name = ?, street = ?, city = ?, state = ?, postal_code = ?, profile_photo = COALESCE(?, profile_photo)
        WHERE id = ?`,
       [
         full_name,
         email,
         phone || null,
         company_name || null,
-        address || null,
+        street || null,
+        city || null,
+        state || null,
+        postal_code || null,
+        profilePhoto,
         userId,
       ]
     );
 
     // Fetch updated user data
     const [updatedUsers] = await pool.query(
-      "SELECT id, user_type, full_name, company_name, email, phone, address, account_status, last_login, created_at FROM users WHERE id = ?",
+      "SELECT id, user_type, full_name, company_name, email, phone, street, city, state, postal_code, account_status, last_login, admin_discount, created_at, notes, profile_photo FROM users WHERE id = ?",
       [userId]
     );
 
@@ -554,6 +821,7 @@ app.put("/api/profile", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 // Change Password API
 
@@ -3357,10 +3625,40 @@ app.post("/api/admin/reset-password", async (req, res) => {
 
 // Fetch All Users
 
+// app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
+//   try {
+//     const [users] = await pool.query(
+//       "SELECT id, full_name, email, phone, created_at, last_login, account_status, is_active, company_name, address, admin_discount, updated_at,notes FROM users WHERE user_type = 'customer'"
+//     );
+
+//     res.json({
+//       users: users.map((user) => ({
+//         id: user.id,
+//         fullName: user.full_name,
+//         email: user.email,
+//         phone: user.phone,
+//         joinDate: user.created_at,
+//         lastLogin: user.last_login || null,
+//         account_status: user.account_status,
+//         is_active: user.is_active,
+//         company_name: user.company_name,
+//         address: user.address,
+//         admin_discount: user.admin_discount,
+//         updated_at: user.updated_at,
+//         notes: user.notes,
+//       })),
+//     });
+//   } catch (err) {
+//     console.error("Server error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+
 app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
   try {
     const [users] = await pool.query(
-      "SELECT id, full_name, email, phone, created_at, last_login, account_status, is_active, company_name, address, admin_discount, updated_at,notes FROM users WHERE user_type = 'customer'"
+      "SELECT id, full_name, email, phone, created_at, last_login, account_status, is_active, company_name, street, city, state, postal_code, admin_discount, updated_at, notes FROM users WHERE user_type = 'customer'"
     );
 
     res.json({
@@ -3374,7 +3672,10 @@ app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
         account_status: user.account_status,
         is_active: user.is_active,
         company_name: user.company_name,
-        address: user.address,
+        street: user.street,
+        city: user.city,
+        state: user.state,
+        postal_code: user.postal_code,
         admin_discount: user.admin_discount,
         updated_at: user.updated_at,
         notes: user.notes,
@@ -3385,6 +3686,9 @@ app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+
+
 
 // fetch all vendors
 
