@@ -462,7 +462,7 @@ app.post("/api/signup", async (req, res) => {
     // Admin notification email
     const adminMailOptions = {
       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-      to: "aashish.shroff@zeta-v.com",
+      to: "sjingle@studiosignaturecabinets.com",
       subject: `New ${userType.charAt(0).toUpperCase() + userType.slice(1)} Signup Request - ${fullName}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
