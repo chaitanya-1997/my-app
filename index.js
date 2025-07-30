@@ -6939,6 +6939,34 @@ app.post(
     }
   }
 );
+app.get(
+  "/api/admin/products",
+  adminauthenticateToken,
+  async (req, res) => {
+    try {
+      // Fetch all products
+      const [products] = await pool.query(`SELECT * FROM products`);
+
+      // Format response to match frontend expectations
+      const formattedProducts = products.map((product) => ({
+        id: product.id,
+        name: product.name,
+        item_type: product.item_type,
+        color: product.color,
+        photo_path: product.photo_path
+          ? `${req.protocol}://${req.get("host")}${product.photo_path}`
+          : null,
+        is_visible: product.is_visible,
+        updated_at: new Date(product.updated_at).toISOString(),
+      }));
+
+      res.json(formattedProducts);
+    } catch (err) {
+      console.error("Server error:", err);
+      res.status(500).json({ error: err.message || "Server error" });
+    }
+  }
+);
 
 // GET /api/admin/products/:id
 app.get("/api/admin/products/:id", adminauthenticateToken, async (req, res) => {
