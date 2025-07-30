@@ -316,7 +316,6 @@ const generateInvoiceNumber = async () => {
 //   }
 // });
 
-
 app.post("/api/signup", async (req, res) => {
   const {
     userType,
@@ -324,7 +323,7 @@ app.post("/api/signup", async (req, res) => {
     email,
     password,
     confirmPassword,
-    businessName, 
+    businessName,
     taxId,
     phone,
     street,
@@ -338,50 +337,52 @@ app.post("/api/signup", async (req, res) => {
   if (!userType || !["customer", "vendor"].includes(userType)) {
     return res.status(400).json({ error: "Invalid user type" });
   }
-  
+
   // Required fields
   if (!fullName || !email || !password || !confirmPassword) {
     return res.status(400).json({ error: "Missing required fields" });
   }
-  
+
   if (password !== confirmPassword) {
     return res.status(400).json({ error: "Passwords do not match" });
   }
-  
+
   if (!agreeTerms) {
     return res.status(400).json({ error: "You must agree to the terms" });
   }
-  
+
   if (userType === "vendor" && (!businessName || !taxId)) {
     return res.status(400).json({
       error: "Company name and tax ID are required for vendors",
     });
   }
-  
+
   // Basic check for address fields presence
   if (!street || !city || !state || !postalCode) {
     return res.status(400).json({
-      error: "Please provide complete address: street, city, state, and postal code",
+      error:
+        "Please provide complete address: street, city, state, and postal code",
     });
   }
-  
+
   // Email validation (simple)
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || /\s/.test(email)) {
     return res.status(400).json({ error: "Invalid email format" });
   }
-  
+
   // Password validation (same rules as frontend)
   if (
     !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/.test(
       password
-    ) || /\s/.test(password)
+    ) ||
+    /\s/.test(password)
   ) {
     return res.status(400).json({
       error:
         "Password must be at least 8 characters long and include uppercase, lowercase, number, special character, and no spaces",
     });
   }
-  
+
   // Phone validation: allowing + and other characters, but exactly 10 digits
   const digitsOnly = phone.replace(/[^\d]/g, "");
   if (!/^\d{10}$/.test(digitsOnly)) {
@@ -450,8 +451,16 @@ app.post("/api/signup", async (req, res) => {
             <li><strong>City:</strong> ${city || "N/A"}</li>
             <li><strong>State:</strong> ${state || "N/A"}</li>
             <li><strong>Postal Code:</strong> ${postalCode || "N/A"}</li>
-            ${businessName ? `<li><strong>Company Name:</strong> ${businessName}</li>` : ""}
-            ${userType === "vendor" && taxId ? `<li><strong>Tax ID:</strong> ${taxId}</li>` : ""}
+            ${
+              businessName
+                ? `<li><strong>Company Name:</strong> ${businessName}</li>`
+                : ""
+            }
+            ${
+              userType === "vendor" && taxId
+                ? `<li><strong>Tax ID:</strong> ${taxId}</li>`
+                : ""
+            }
           </ul>
           <p>We're excited to have you join our community! You'll hear from us soon.</p>
           <p>Best regards,<br>Team Studio Signature Cabinets</p>
@@ -463,15 +472,21 @@ app.post("/api/signup", async (req, res) => {
     const adminMailOptions = {
       from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
       to: "sjingle@studiosignaturecabinets.com",
-      subject: `New ${userType.charAt(0).toUpperCase() + userType.slice(1)} Signup Request - ${fullName}`,
+      subject: `New ${
+        userType.charAt(0).toUpperCase() + userType.slice(1)
+      } Signup Request - ${fullName}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2>New ${userType.charAt(0).toUpperCase() + userType.slice(1)} Signup Request</h2>
+          <h2>New ${
+            userType.charAt(0).toUpperCase() + userType.slice(1)
+          } Signup Request</h2>
           <p>A new ${userType} has submitted a signup request on ${new Date().toLocaleDateString()}. Please review and approve or reject this user in the admin panel.</p>
           <h3>User Details:</h3>
           <ul style="list-style: none; padding: 0;">
             <li><strong>User ID:</strong> ${userId}</li>
-            <li><strong>User Type:</strong> ${userType.charAt(0).toUpperCase() + userType.slice(1)}</li>
+            <li><strong>User Type:</strong> ${
+              userType.charAt(0).toUpperCase() + userType.slice(1)
+            }</li>
             <li><strong>Full Name:</strong> ${fullName}</li>
             <li><strong>Email:</strong> ${email}</li>
             <li><strong>Phone:</strong> ${phone || "N/A"}</li>
@@ -479,8 +494,16 @@ app.post("/api/signup", async (req, res) => {
             <li><strong>City:</strong> ${city || "N/A"}</li>
             <li><strong>State:</strong> ${state || "N/A"}</li>
             <li><strong>Postal Code:</strong> ${postalCode || "N/A"}</li>
-            ${businessName ? `<li><strong>Company Name:</strong> ${businessName}</li>` : ""}
-            ${userType === "vendor" && taxId ? `<li><strong>Tax ID:</strong> ${taxId}</li>` : ""}
+            ${
+              businessName
+                ? `<li><strong>Company Name:</strong> ${businessName}</li>`
+                : ""
+            }
+            ${
+              userType === "vendor" && taxId
+                ? `<li><strong>Tax ID:</strong> ${taxId}</li>`
+                : ""
+            }
             <li><strong>Signup Date:</strong> ${new Date().toLocaleDateString()}</li>
             <li><strong>Status:</strong> Pending Approval</li>
           </ul>
@@ -516,7 +539,6 @@ app.post("/api/signup", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-
 
 // Login API
 
@@ -660,14 +682,12 @@ app.get("/api/verify-token", authenticateToken, async (req, res) => {
   res.json({ user: { id: req.user.id, email: req.user.email } });
 });
 
-// Get User Profile API
-
-
+// GET /api/profile
 // app.get("/api/profile", authenticateToken, async (req, res) => {
 //   try {
 //     const userId = req.user.id;
 //     const [users] = await pool.query(
-//       "SELECT id, user_type, full_name, company_name, email, phone, address, account_status, last_login, admin_discount, created_at, notes FROM users WHERE id = ?",
+//       "SELECT id, user_type, full_name, company_name, email, phone, street, city, state, postal_code, account_status, last_login, admin_discount, created_at, notes, profile_photo FROM users WHERE id = ?",
 //       [userId]
 //     );
 
@@ -682,70 +702,18 @@ app.get("/api/verify-token", authenticateToken, async (req, res) => {
 //   }
 // });
 
-// // Update User Profile API
-// app.put("/api/profile", authenticateToken, async (req, res) => {
-//   const { full_name, email, phone, company_name, address } = req.body;
-//   const userId = req.user.id;
-
-//   try {
-//     // Validate input
-//     if (!full_name || !email) {
-//       return res
-//         .status(400)
-//         .json({ error: "Full name and email are required" });
-//     }
-
-//     // Check if email is already in use by another user
-//     const [existingUsers] = await pool.query(
-//       "SELECT id FROM users WHERE email = ? AND id != ?",
-//       [email, userId]
-//     );
-//     if (existingUsers.length > 0) {
-//       return res.status(400).json({ error: "Email is already in use" });
-//     }
-
-//     // Update user details
-//     await pool.query(
-//       `UPDATE users 
-//        SET full_name = ?, email = ?, phone = ?, company_name = ?, address = ?
-//        WHERE id = ?`,
-//       [
-//         full_name,
-//         email,
-//         phone || null,
-//         company_name || null,
-//         address || null,
-//         userId,
-//       ]
-//     );
-
-//     // Fetch updated user data
-//     const [updatedUsers] = await pool.query(
-//       "SELECT id, user_type, full_name, company_name, email, phone, address, account_status, last_login, created_at FROM users WHERE id = ?",
-//       [userId]
-//     );
-
-//     if (updatedUsers.length === 0) {
-//       return res.status(404).json({ error: "User not found" });
-//     }
-
-//     res.json({
-//       message: "Profile updated successfully",
-//       user: updatedUsers[0],
-//     });
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ error: "Server error" });
-//   }
-// });
-
-
-// GET /api/profile
 app.get("/api/profile", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const [users] = await pool.query(
-      "SELECT id, user_type, full_name, company_name, email, phone, street, city, state, postal_code, account_status, last_login, admin_discount, created_at, notes, profile_photo FROM users WHERE id = ?",
+      `SELECT u.id, u.user_type, u.full_name, u.company_name, u.email, u.phone, 
+              u.street, u.city, u.state, u.postal_code, u.account_status, u.last_login, 
+              u.admin_discount, u.created_at, u.notes, u.profile_photo,u.admin_discount,
+              u.team_member_id, t.name AS team_member_name, t.position AS team_member_position,
+              t.email AS team_member_email, t.phone AS team_member_phone, t.photo_path AS team_member_photo
+       FROM users u
+       LEFT JOIN team_members t ON u.team_member_id = t.id
+       WHERE u.id = ?`,
       [userId]
     );
 
@@ -761,67 +729,80 @@ app.get("/api/profile", authenticateToken, async (req, res) => {
 });
 
 // PUT /api/profile
-app.put("/api/profile", authenticateToken, upload.single("profile_photo"), async (req, res) => {
-  const { full_name, email, phone, company_name, street, city, state, postal_code } = req.body;
-  const userId = req.user.id;
-  const profilePhoto = req.file ? `/uploads/${req.file.filename}` : null;
+app.put(
+  "/api/profile",
+  authenticateToken,
+  upload.single("profile_photo"),
+  async (req, res) => {
+    const {
+      full_name,
+      email,
+      phone,
+      company_name,
+      street,
+      city,
+      state,
+      postal_code,
+    } = req.body;
+    const userId = req.user.id;
+    const profilePhoto = req.file ? `/uploads/${req.file.filename}` : null;
 
-  try {
-    // Validate input
-    if (!full_name || !email) {
-      return res
-        .status(400)
-        .json({ error: "Full name and email are required" });
-    }
+    try {
+      // Validate input
+      if (!full_name || !email) {
+        return res
+          .status(400)
+          .json({ error: "Full name and email are required" });
+      }
 
-    // Check if email is already in use by another user
-    const [existingUsers] = await pool.query(
-      "SELECT id FROM users WHERE email = ? AND id != ?",
-      [email, userId]
-    );
-    if (existingUsers.length > 0) {
-      return res.status(400).json({ error: "Email is already in use" });
-    }
+      // Check if email is already in use by another user
+      const [existingUsers] = await pool.query(
+        "SELECT id FROM users WHERE email = ? AND id != ?",
+        [email, userId]
+      );
+      if (existingUsers.length > 0) {
+        return res.status(400).json({ error: "Email is already in use" });
+      }
 
-    // Update user details
-    await pool.query(
-      `UPDATE users 
+      // Update user details
+      await pool.query(
+        `UPDATE users 
        SET full_name = ?, email = ?, phone = ?, company_name = ?, street = ?, city = ?, state = ?, postal_code = ?, profile_photo = COALESCE(?, profile_photo)
        WHERE id = ?`,
-      [
-        full_name,
-        email,
-        phone || null,
-        company_name || null,
-        street || null,
-        city || null,
-        state || null,
-        postal_code || null,
-        profilePhoto,
-        userId,
-      ]
-    );
+        [
+          full_name,
+          email,
+          phone || null,
+          company_name || null,
+          street || null,
+          city || null,
+          state || null,
+          postal_code || null,
+          profilePhoto,
+          userId,
+        ]
+      );
 
-    // Fetch updated user data
-    const [updatedUsers] = await pool.query(
-      "SELECT id, user_type, full_name, company_name, email, phone, street, city, state, postal_code, account_status, last_login, admin_discount, created_at, notes, profile_photo FROM users WHERE id = ?",
-      [userId]
-    );
+      // Fetch updated user data
+      const [updatedUsers] = await pool.query(
+        "SELECT id, user_type, full_name, company_name, email, phone, street, city, state, postal_code, account_status, last_login, admin_discount, created_at, notes, profile_photo FROM users WHERE id = ?",
+        [userId]
+      );
 
-    if (updatedUsers.length === 0) {
-      return res.status(404).json({ error: "User not found" });
+      if (updatedUsers.length === 0) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      res.json({
+        message: "Profile updated successfully",
+        user: updatedUsers[0],
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Server error" });
     }
-
-    res.json({
-      message: "Profile updated successfully",
-      user: updatedUsers[0],
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
   }
-});
-
+);
 
 // Change Password API
 
@@ -1230,9 +1211,6 @@ app.get("/api/orders/next-id", async (req, res) => {
 //   }
 // });
 
-
-
-
 // app.post("/api/orders", authenticateToken, async (req, res) => {
 //   const {
 //     doorStyle,
@@ -1348,8 +1326,8 @@ app.get("/api/orders/next-id", async (req, res) => {
 //       // Insert order with design_services_price and assembly_flag
 //       const [orderResult] = await connection.query(
 //         `INSERT INTO orders (
-//           user_id, door_style, finish_type, stain_option, paint_option, 
-//           account, bill_to, design_services_price, assembly_flag, 
+//           user_id, door_style, finish_type, stain_option, paint_option,
+//           account, bill_to, design_services_price, assembly_flag,
 //           subtotal, tax, shipping, discount, total, status, created_at
 //         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', NOW())`,
 //         [
@@ -1556,7 +1534,6 @@ app.get("/api/orders/next-id", async (req, res) => {
 //   }
 // });
 
-
 app.post("/api/orders", authenticateToken, async (req, res) => {
   const {
     doorStyle,
@@ -1752,10 +1729,10 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
       );
 
       // Update qty in items table
-      await connection.query(
-        `UPDATE items SET qty = qty - ? WHERE sku = ?`,
-        [item.quantity, item.sku]
-      );
+      await connection.query(`UPDATE items SET qty = qty - ? WHERE sku = ?`, [
+        item.quantity,
+        item.sku,
+      ]);
     }
 
     // Commit transaction
@@ -1837,9 +1814,9 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
           )}</li>
           ${
             discount > 0
-              ? `<li><strong>Discount:</strong> $${parseFloat(
-                  discount
-                ).toFixed(2)}</li>`
+              ? `<li><strong>Discount:</strong> $${parseFloat(discount).toFixed(
+                  2
+                )}</li>`
               : ""
           }
           <li><strong>Tax (7%):</strong> $${parseFloat(tax).toFixed(2)}</li>
@@ -1910,8 +1887,6 @@ app.post("/api/orders", authenticateToken, async (req, res) => {
     }
   }
 });
-
-
 
 app.get("/api/orders", authenticateToken, async (req, res) => {
   try {
@@ -3623,12 +3598,10 @@ app.post("/api/admin/reset-password", async (req, res) => {
   }
 });
 
-// Fetch All Users
-
 // app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
 //   try {
 //     const [users] = await pool.query(
-//       "SELECT id, full_name, email, phone, created_at, last_login, account_status, is_active, company_name, address, admin_discount, updated_at,notes FROM users WHERE user_type = 'customer'"
+//       "SELECT id, full_name, email, phone, created_at, last_login, account_status, is_active, company_name, street, city, state, postal_code, admin_discount, updated_at, notes FROM users WHERE user_type = 'customer'"
 //     );
 
 //     res.json({
@@ -3642,7 +3615,10 @@ app.post("/api/admin/reset-password", async (req, res) => {
 //         account_status: user.account_status,
 //         is_active: user.is_active,
 //         company_name: user.company_name,
-//         address: user.address,
+//         street: user.street,
+//         city: user.city,
+//         state: user.state,
+//         postal_code: user.postal_code,
 //         admin_discount: user.admin_discount,
 //         updated_at: user.updated_at,
 //         notes: user.notes,
@@ -3653,42 +3629,6 @@ app.post("/api/admin/reset-password", async (req, res) => {
 //     res.status(500).json({ error: "Server error" });
 //   }
 // });
-
-
-app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
-  try {
-    const [users] = await pool.query(
-      "SELECT id, full_name, email, phone, created_at, last_login, account_status, is_active, company_name, street, city, state, postal_code, admin_discount, updated_at, notes FROM users WHERE user_type = 'customer'"
-    );
-
-    res.json({
-      users: users.map((user) => ({
-        id: user.id,
-        fullName: user.full_name,
-        email: user.email,
-        phone: user.phone,
-        joinDate: user.created_at,
-        lastLogin: user.last_login || null,
-        account_status: user.account_status,
-        is_active: user.is_active,
-        company_name: user.company_name,
-        street: user.street,
-        city: user.city,
-        state: user.state,
-        postal_code: user.postal_code,
-        admin_discount: user.admin_discount,
-        updated_at: user.updated_at,
-        notes: user.notes,
-      })),
-    });
-  } catch (err) {
-    console.error("Server error:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-
-
 
 // fetch all vendors
 
@@ -3717,6 +3657,46 @@ app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
 //     res.status(500).json({ error: "Server error" });
 //   }
 // });
+
+app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
+  try {
+    const [users] = await pool.query(
+      `SELECT u.id, u.full_name, u.email, u.phone, u.created_at, u.last_login, 
+              u.account_status, u.is_active, u.company_name, u.street, u.city, 
+              u.state, u.postal_code, u.admin_discount, u.updated_at, u.notes, 
+              u.team_member_id, t.name AS team_member_name
+       FROM users u
+       LEFT JOIN team_members t ON u.team_member_id = t.id
+       WHERE u.user_type = 'customer'`
+    );
+
+    res.json({
+      users: users.map((user) => ({
+        id: user.id,
+        fullName: user.full_name,
+        email: user.email,
+        phone: user.phone,
+        joinDate: user.created_at,
+        lastLogin: user.last_login || null,
+        account_status: user.account_status,
+        is_active: user.is_active,
+        company_name: user.company_name,
+        street: user.street,
+        city: user.city,
+        state: user.state,
+        postal_code: user.postal_code,
+        admin_discount: user.admin_discount,
+        updated_at: user.updated_at,
+        notes: user.notes,
+        team_member_id: user.team_member_id,
+        team_member_name: user.team_member_name,
+      })),
+    });
+  } catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 app.get("/api/admin/vendors", adminauthenticateToken, async (req, res) => {
   try {
@@ -3803,7 +3783,9 @@ app.put("/api/admin/vendor/:id", adminauthenticateToken, async (req, res) => {
   }
 });
 
-app.put("/api/admin/vendor/:id/status",adminauthenticateToken,
+app.put(
+  "/api/admin/vendor/:id/status",
+  adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
@@ -3924,16 +3906,67 @@ app.put("/api/admin/vendor/:id/status",adminauthenticateToken,
 //   }
 // );
 
-app.put( "/api/admin/user/:id/discount",adminauthenticateToken,
+// app.put(
+//   "/api/admin/user/:id/discount",
+//   adminauthenticateToken,
+//   async (req, res) => {
+//     const { id } = req.params;
+//     const { admin_discount, notes } = req.body;
+
+//     // Validate discount
+//     if (
+//       typeof admin_discount !== "number" ||
+//       admin_discount < 0 ||
+//       admin_discount > 100
+//     ) {
+//       return res
+//         .status(400)
+//         .json({ error: "Discount must be a number between 0 and 100" });
+//     }
+
+//     // Validate notes (optional, can be null or string)
+//     if (notes !== undefined && notes !== null && typeof notes !== "string") {
+//       return res.status(400).json({ error: "Notes must be a string or null" });
+//     }
+
+//     try {
+//       // Check if user exists
+//       const [users] = await pool.query("SELECT id FROM users WHERE id = ?", [
+//         id,
+//       ]);
+//       if (users.length === 0) {
+//         return res.status(404).json({ error: "User not found" });
+//       }
+
+//       // Update discount and notes
+//       await pool.query(
+//         "UPDATE users SET admin_discount = ?, notes = ?, updated_at = NOW() WHERE id = ?",
+//         [admin_discount, notes || null, id]
+//       );
+
+//       res.json({ message: "Customer discount and notes updated successfully" });
+//     } catch (err) {
+//       console.error("Server error:", err);
+//       res.status(500).json({ error: "Server error" });
+//     }
+//   }
+// );
+
+app.put(
+  "/api/admin/user/:id/discount",
+  adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
-    const { admin_discount, notes } = req.body;
+    const { admin_discount, notes, team_member_id } = req.body;
+
+    console.log("Received payload:", { admin_discount, notes, team_member_id }); // Debug log
 
     // Validate discount
     if (
-      typeof admin_discount !== "number" ||
-      admin_discount < 0 ||
-      admin_discount > 100
+      admin_discount !== undefined &&
+      (typeof admin_discount !== "number" ||
+        admin_discount < 0 ||
+        admin_discount > 100)
     ) {
       return res
         .status(400)
@@ -3945,6 +3978,36 @@ app.put( "/api/admin/user/:id/discount",adminauthenticateToken,
       return res.status(400).json({ error: "Notes must be a string or null" });
     }
 
+    // Validate team_member_id (optional, must be a number, string that parses to an integer, or null)
+    let parsedTeamMemberId = team_member_id;
+    if (
+      team_member_id !== undefined &&
+      team_member_id !== null &&
+      typeof team_member_id === "string" &&
+      !/^\d+$/.test(team_member_id)
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Team member ID must be a valid integer or null" });
+    }
+    if (typeof team_member_id === "string") {
+      parsedTeamMemberId = parseInt(team_member_id);
+      if (isNaN(parsedTeamMemberId)) {
+        return res
+          .status(400)
+          .json({ error: "Team member ID must be a valid integer" });
+      }
+    }
+    if (
+      parsedTeamMemberId !== null &&
+      (typeof parsedTeamMemberId !== "number" ||
+        !Number.isInteger(parsedTeamMemberId))
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Team member ID must be an integer or null" });
+    }
+
     try {
       // Check if user exists
       const [users] = await pool.query("SELECT id FROM users WHERE id = ?", [
@@ -3954,13 +4017,68 @@ app.put( "/api/admin/user/:id/discount",adminauthenticateToken,
         return res.status(404).json({ error: "User not found" });
       }
 
-      // Update discount and notes
+      // Validate team_member_id if provided
+      if (parsedTeamMemberId) {
+        const [teamMembers] = await pool.query(
+          "SELECT id, name FROM team_members WHERE id = ?",
+          [parsedTeamMemberId]
+        );
+        if (teamMembers.length === 0) {
+          return res.status(404).json({ error: "Team member not found" });
+        }
+      }
+
+      // Update discount, notes, and team_member_id
       await pool.query(
-        "UPDATE users SET admin_discount = ?, notes = ?, updated_at = NOW() WHERE id = ?",
-        [admin_discount, notes || null, id]
+        "UPDATE users SET admin_discount = ?, notes = ?, team_member_id = ?, updated_at = NOW() WHERE id = ?",
+        [
+          admin_discount !== undefined ? admin_discount : null,
+          notes !== undefined ? notes : null,
+          parsedTeamMemberId !== undefined ? parsedTeamMemberId : null,
+          id,
+        ]
       );
 
-      res.json({ message: "Customer discount and notes updated successfully" });
+      // Fetch updated user data
+      const [updatedUser] = await pool.query(
+        `SELECT u.id, u.full_name, u.email, u.phone, u.created_at, u.last_login, 
+                u.account_status, u.is_active, u.company_name, u.street, u.city, 
+                u.state, u.postal_code, u.admin_discount, u.updated_at, u.notes, 
+                u.team_member_id, t.name AS team_member_name
+         FROM users u
+         LEFT JOIN team_members t ON u.team_member_id = t.id
+         WHERE u.id = ?`,
+        [id]
+      );
+
+      if (updatedUser.length === 0) {
+        return res.status(404).json({ error: "User not found after update" });
+      }
+
+      res.json({
+        message:
+          "Customer discount, notes, and team member updated successfully",
+        user: {
+          id: updatedUser[0].id,
+          fullName: updatedUser[0].full_name,
+          email: updatedUser[0].email,
+          phone: updatedUser[0].phone,
+          joinDate: updatedUser[0].created_at,
+          lastLogin: updatedUser[0].last_login || null,
+          account_status: updatedUser[0].account_status,
+          is_active: updatedUser[0].is_active,
+          company_name: updatedUser[0].company_name,
+          street: updatedUser[0].street,
+          city: updatedUser[0].city,
+          state: updatedUser[0].state,
+          postal_code: updatedUser[0].postal_code,
+          admin_discount: updatedUser[0].admin_discount,
+          updated_at: updatedUser[0].updated_at,
+          notes: updatedUser[0].notes,
+          team_member_id: updatedUser[0].team_member_id,
+          team_member_name: updatedUser[0].team_member_name,
+        },
+      });
     } catch (err) {
       console.error("Server error:", err);
       res.status(500).json({ error: "Server error" });
@@ -3970,7 +4088,9 @@ app.put( "/api/admin/user/:id/discount",adminauthenticateToken,
 
 // Update User Status
 
-app.put("/api/admin/user/:id/status",adminauthenticateToken,
+app.put(
+  "/api/admin/user/:id/status",
+  adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
@@ -4388,7 +4508,9 @@ app.post("/api/admin/orders/:id", adminauthenticateToken, async (req, res) => {
 });
 
 // PUT /api/admin/orders/:id/shipping (fallback)
-app.put("/api/admin/orders/:id/shipping",adminauthenticateToken,
+app.put(
+  "/api/admin/orders/:id/shipping",
+  adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
     const { shipping, additional_discount } = req.body;
@@ -4560,11 +4682,11 @@ app.put("/api/admin/orders/:id/shipping",adminauthenticateToken,
 
 //     try {
 //       const [orders] = await pool.query(
-//         `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option, 
-//               o.subtotal, o.tax, o.shipping, o.discount, o.additional_discount, o.total, o.status, 
-//               u.full_name, u.email 
-//        FROM orders o 
-//        LEFT JOIN users u ON o.user_id = u.id 
+//         `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option,
+//               o.subtotal, o.tax, o.shipping, o.discount, o.additional_discount, o.total, o.status,
+//               u.full_name, u.email
+//        FROM orders o
+//        LEFT JOIN users u ON o.user_id = u.id
 //        WHERE o.id = ?`,
 //         [id]
 //       );
@@ -4619,8 +4741,8 @@ app.put("/api/admin/orders/:id/shipping",adminauthenticateToken,
 
 //       // Fetch order items for email
 //       const [orderItems] = await pool.query(
-//         `SELECT sku, name, quantity, door_style, finish, price, total_amount 
-//        FROM order_items 
+//         `SELECT sku, name, quantity, door_style, finish, price, total_amount
+//        FROM order_items
 //        WHERE order_id = ?`,
 //         [order.id]
 //       );
@@ -4914,143 +5036,157 @@ app.put("/api/admin/orders/:id/shipping",adminauthenticateToken,
 //   }
 // );
 
+app.put(
+  "/api/admin/orders/:id/status",
+  adminauthenticateToken,
+  async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    let connection;
 
+    // Validate status
+    if (
+      !["Pending", "Accepted", "Processing", "Completed", "Cancelled"].includes(
+        status
+      )
+    ) {
+      return res.status(400).json({
+        error:
+          "Invalid status. Must be Pending, Accepted, Processing, Completed, or Cancelled",
+      });
+    }
 
-app.put("/api/admin/orders/:id/status", adminauthenticateToken, async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body;
-  let connection;
+    try {
+      // Start transaction
+      connection = await pool.getConnection();
+      await connection.beginTransaction();
 
-  // Validate status
-  if (!["Pending", "Accepted", "Processing", "Completed", "Cancelled"].includes(status)) {
-    return res.status(400).json({
-      error: "Invalid status. Must be Pending, Accepted, Processing, Completed, or Cancelled",
-    });
-  }
-
-  try {
-    // Start transaction
-    connection = await pool.getConnection();
-    await connection.beginTransaction();
-
-    // Fetch order details
-    const [orders] = await connection.query(
-      `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option, 
+      // Fetch order details
+      const [orders] = await connection.query(
+        `SELECT o.id, o.order_id, o.user_id, o.door_style, o.finish_type, o.stain_option, o.paint_option, 
               o.subtotal, o.tax, o.shipping, o.discount, o.additional_discount, o.total, o.status, 
               u.full_name, u.email 
        FROM orders o 
        LEFT JOIN users u ON o.user_id = u.id 
        WHERE o.id = ?`,
-      [id]
-    );
+        [id]
+      );
 
-    if (orders.length === 0) {
-      await connection.rollback();
-      connection.release();
-      return res.status(404).json({ error: "Order not found" });
-    }
+      if (orders.length === 0) {
+        await connection.rollback();
+        connection.release();
+        return res.status(404).json({ error: "Order not found" });
+      }
 
-    const order = orders[0];
+      const order = orders[0];
 
-    // Prevent updating a cancelled order
-    if (order.status === "Cancelled") {
-      await connection.rollback();
-      connection.release();
-      return res.status(400).json({
-        error: "Cannot update status of a cancelled order",
-      });
-    }
+      // Prevent updating a cancelled order
+      if (order.status === "Cancelled") {
+        await connection.rollback();
+        connection.release();
+        return res.status(400).json({
+          error: "Cannot update status of a cancelled order",
+        });
+      }
 
-    const user = {
-      full_name: order.full_name || "Customer",
-      email: order.email || "N/A",
-    };
-    const additionalDiscountPercent =
-      order.subtotal && order.additional_discount
-        ? ((order.additional_discount / order.subtotal) * 100).toFixed(2)
-        : "0.00";
+      const user = {
+        full_name: order.full_name || "Customer",
+        email: order.email || "N/A",
+      };
+      const additionalDiscountPercent =
+        order.subtotal && order.additional_discount
+          ? ((order.additional_discount / order.subtotal) * 100).toFixed(2)
+          : "0.00";
 
-    // If status is Cancelled, restore item quantities
-    if (status === "Cancelled") {
-      // Fetch order items
-      const [orderItems] = await connection.query(
-        `SELECT sku, quantity 
+      // If status is Cancelled, restore item quantities
+      if (status === "Cancelled") {
+        // Fetch order items
+        const [orderItems] = await connection.query(
+          `SELECT sku, quantity 
          FROM order_items 
          WHERE order_id = ?`,
+          [order.id]
+        );
+
+        // Update qty in items table for each order item
+        for (const item of orderItems) {
+          const [itemResult] = await connection.query(
+            `SELECT id FROM items WHERE sku = ?`,
+            [item.sku]
+          );
+
+          if (itemResult.length === 0) {
+            await connection.rollback();
+            connection.release();
+            return res.status(400).json({
+              error: `Item with SKU ${item.sku} not found in inventory`,
+            });
+          }
+
+          await connection.query(
+            `UPDATE items SET qty = qty + ? WHERE sku = ?`,
+            [item.quantity, item.sku]
+          );
+        }
+      }
+
+      // Update order status
+      await connection.query("UPDATE orders SET status = ? WHERE id = ?", [
+        status,
+        id,
+      ]);
+
+      // Generate invoice if status is Completed
+      let invoiceNumber = null;
+      if (status === "Completed") {
+        invoiceNumber = `INV-${order.order_id}-${Date.now()}`;
+        await connection.query(
+          `INSERT INTO invoices (invoice_number, order_id, user_id, subtotal, tax, shipping, discount, additional_discount, total)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            invoiceNumber,
+            order.id,
+            order.user_id,
+            order.subtotal,
+            order.tax,
+            order.shipping,
+            order.discount,
+            order.additional_discount,
+            order.total,
+          ]
+        );
+      }
+
+      // Fetch order items for email
+      const [orderItems] = await connection.query(
+        `SELECT sku, name, quantity, door_style, finish, price, total_amount 
+       FROM order_items 
+       WHERE order_id = ?`,
         [order.id]
       );
 
-      // Update qty in items table for each order item
-      for (const item of orderItems) {
-        const [itemResult] = await connection.query(
-          `SELECT id FROM items WHERE sku = ?`,
-          [item.sku]
-        );
+      // Commit transaction
+      await connection.commit();
+      connection.release();
 
-        if (itemResult.length === 0) {
-          await connection.rollback();
-          connection.release();
-          return res.status(400).json({
-            error: `Item with SKU ${item.sku} not found in inventory`,
-          });
-        }
-
-        await connection.query(
-          `UPDATE items SET qty = qty + ? WHERE sku = ?`,
-          [item.quantity, item.sku]
-        );
-      }
-    }
-
-    // Update order status
-    await connection.query("UPDATE orders SET status = ? WHERE id = ?", [status, id]);
-
-    // Generate invoice if status is Completed
-    let invoiceNumber = null;
-    if (status === "Completed") {
-      invoiceNumber = `INV-${order.order_id}-${Date.now()}`;
-      await connection.query(
-        `INSERT INTO invoices (invoice_number, order_id, user_id, subtotal, tax, shipping, discount, additional_discount, total)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          invoiceNumber,
-          order.id,
-          order.user_id,
-          order.subtotal,
-          order.tax,
-          order.shipping,
-          order.discount,
-          order.additional_discount,
-          order.total,
-        ]
-      );
-    }
-
-    // Fetch order items for email
-    const [orderItems] = await connection.query(
-      `SELECT sku, name, quantity, door_style, finish, price, total_amount 
-       FROM order_items 
-       WHERE order_id = ?`,
-      [order.id]
-    );
-
-    // Commit transaction
-    await connection.commit();
-    connection.release();
-
-    // Send email for status updates
-    if (["Accepted", "Processing", "Completed", "Cancelled"].includes(status) && user.email !== "N/A") {
-      let mailOptions;
-      switch (status) {
-        case "Completed":
-          mailOptions = {
-            from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-            to: user.email,
-            subject: `Your Order #${order.order_id} Has Been Completed! Invoice #${invoiceNumber}`,
-            html: `
+      // Send email for status updates
+      if (
+        ["Accepted", "Processing", "Completed", "Cancelled"].includes(status) &&
+        user.email !== "N/A"
+      ) {
+        let mailOptions;
+        switch (status) {
+          case "Completed":
+            mailOptions = {
+              from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+              to: user.email,
+              subject: `Your Order #${order.order_id} Has Been Completed! Invoice #${invoiceNumber}`,
+              html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>Fantastic news! Your order <strong>#${order.order_id}</strong> has been completed and shipped.</p>
+                <p>Fantastic news! Your order <strong>#${
+                  order.order_id
+                }</strong> has been completed and shipped.</p>
                 <p>Your invoice <strong>#${invoiceNumber}</strong> is now available in your customer portal.</p>
                 <h3>Invoice Details:</h3>
                 <table style="width: 100%; border-collapse: collapse;">
@@ -5068,11 +5204,21 @@ app.put("/api/admin/orders/:id/status", adminauthenticateToken, async (req, res)
                       .map(
                         (item) => `
                       <tr>
-                        <td style="border: 1px solid #ddd; padding: 8px;">${item.sku}</td>
-                        <td style="border: 1px solid #ddd; padding: 8px;">${item.name}</td>
-                        <td style="border: 1px solid #ddd; padding: 8px;">${item.quantity}</td>
-                        <td style="border: 1px solid #ddd; padding: 8px;">$${parseFloat(item.price || 0).toFixed(2)}</td>
-                        <td style="border: 1px solid #ddd; padding: 8px;">$${parseFloat(item.total_amount || 0).toFixed(2)}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">${
+                          item.sku
+                        }</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">${
+                          item.name
+                        }</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">${
+                          item.quantity
+                        }</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">$${parseFloat(
+                          item.price || 0
+                        ).toFixed(2)}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">$${parseFloat(
+                          item.total_amount || 0
+                        ).toFixed(2)}</td>
                       </tr>
                     `
                       )
@@ -5081,12 +5227,26 @@ app.put("/api/admin/orders/:id/status", adminauthenticateToken, async (req, res)
                 </table>
                 <h3 style="margin-top: 20px;">Summary:</h3>
                 <ul style="list-style: none; padding: 0;">
-                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
-                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
-                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
+                  <li><strong>Subtotal:</strong> $${parseFloat(
+                    order.subtotal
+                  ).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(
+                    order.discount || 0
+                  ).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+                order.additional_discount || 0
+              ).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+                    2
+                  )}</li>
+                  <li><strong>Shipping:</strong> ${
+                    order.shipping !== null
+                      ? `$${parseFloat(order.shipping).toFixed(2)}`
+                      : "-"
+                  }</li>
+                  <li><strong>Total:</strong> $${parseFloat(
+                    order.total
+                  ).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -5098,30 +5258,54 @@ app.put("/api/admin/orders/:id/status", adminauthenticateToken, async (req, res)
                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
               </div>
             `,
-          };
-          break;
-        case "Accepted":
-          mailOptions = {
-            from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-            to: user.email,
-            subject: `Your Order #${order.order_id} Has Been Accepted!`,
-            html: `
+            };
+            break;
+          case "Accepted":
+            mailOptions = {
+              from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+              to: user.email,
+              subject: `Your Order #${order.order_id} Has Been Accepted!`,
+              html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>Great news! Your order <strong>#${order.order_id}</strong> has been accepted and is now being processed.</p>
+                <p>Great news! Your order <strong>#${
+                  order.order_id
+                }</strong> has been accepted and is now being processed.</p>
                 <h3>Order Details:</h3>
                 <ul style="list-style: none; padding: 0;">
                   <li><strong>Order ID:</strong> ${order.order_id}</li>
                   <li><strong>Door Style:</strong> ${order.door_style}</li>
                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
-                  ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
-                  ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
-                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
-                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
-                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
+                  ${
+                    order.stain_option
+                      ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+                      : ""
+                  }
+                  ${
+                    order.paint_option
+                      ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+                      : ""
+                  }
+                  <li><strong>Subtotal:</strong> $${parseFloat(
+                    order.subtotal
+                  ).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(
+                    order.discount || 0
+                  ).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+                order.additional_discount || 0
+              ).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+                    2
+                  )}</li>
+                  <li><strong>Shipping:</strong> ${
+                    order.shipping !== null
+                      ? `$${parseFloat(order.shipping).toFixed(2)}`
+                      : "-"
+                  }</li>
+                  <li><strong>Total:</strong> $${parseFloat(
+                    order.total
+                  ).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -5133,30 +5317,54 @@ app.put("/api/admin/orders/:id/status", adminauthenticateToken, async (req, res)
                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
               </div>
             `,
-          };
-          break;
-        case "Processing":
-          mailOptions = {
-            from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-            to: user.email,
-            subject: `Your Order #${order.order_id} is Being Processed!`,
-            html: `
+            };
+            break;
+          case "Processing":
+            mailOptions = {
+              from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+              to: user.email,
+              subject: `Your Order #${order.order_id} is Being Processed!`,
+              html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>Your order <strong>#${order.order_id}</strong> is now being processed. We're preparing your items for shipment.</p>
+                <p>Your order <strong>#${
+                  order.order_id
+                }</strong> is now being processed. We're preparing your items for shipment.</p>
                 <h3>Order Details:</h3>
                 <ul style="list-style: none; padding: 0;">
                   <li><strong>Order ID:</strong> ${order.order_id}</li>
                   <li><strong>Door Style:</strong> ${order.door_style}</li>
                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
-                  ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
-                  ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
-                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
-                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
-                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
+                  ${
+                    order.stain_option
+                      ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+                      : ""
+                  }
+                  ${
+                    order.paint_option
+                      ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+                      : ""
+                  }
+                  <li><strong>Subtotal:</strong> $${parseFloat(
+                    order.subtotal
+                  ).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(
+                    order.discount || 0
+                  ).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+                order.additional_discount || 0
+              ).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+                    2
+                  )}</li>
+                  <li><strong>Shipping:</strong> ${
+                    order.shipping !== null
+                      ? `$${parseFloat(order.shipping).toFixed(2)}`
+                      : "-"
+                  }</li>
+                  <li><strong>Total:</strong> $${parseFloat(
+                    order.total
+                  ).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -5168,31 +5376,55 @@ app.put("/api/admin/orders/:id/status", adminauthenticateToken, async (req, res)
                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
               </div>
             `,
-          };
-          break;
-        case "Cancelled":
-          mailOptions = {
-            from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
-            to: user.email,
-            subject: `Your Order #${order.order_id} Has Been Cancelled`,
-            html: `
+            };
+            break;
+          case "Cancelled":
+            mailOptions = {
+              from: '"Studio Signature Cabinets" <sssdemo6@gmail.com>',
+              to: user.email,
+              subject: `Your Order #${order.order_id} Has Been Cancelled`,
+              html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2>Hello, ${user.full_name}!</h2>
-                <p>We’re sorry to inform you that your order <strong>#${order.order_id}</strong> has been cancelled.</p>
+                <p>We’re sorry to inform you that your order <strong>#${
+                  order.order_id
+                }</strong> has been cancelled.</p>
                 <p><strong>Note:</strong> This order cannot be reinstated or modified once cancelled.</p>
                 <h3>Order Details:</h3>
                 <ul style="list-style: none; padding: 0;">
                   <li><strong>Order ID:</strong> ${order.order_id}</li>
                   <li><strong>Door Style:</strong> ${order.door_style}</li>
                   <li><strong>Finish Type:</strong> ${order.finish_type}</li>
-                  ${order.stain_option ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>` : ""}
-                  ${order.paint_option ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>` : ""}
-                  <li><strong>Subtotal:</strong> $${parseFloat(order.subtotal).toFixed(2)}</li>
-                  <li><strong>Special Discount:</strong> $${parseFloat(order.discount || 0).toFixed(2)}</li>
-                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(order.additional_discount || 0).toFixed(2)})</li>
-                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(2)}</li>
-                  <li><strong>Shipping:</strong> ${order.shipping !== null ? `$${parseFloat(order.shipping).toFixed(2)}` : "-"}</li>
-                  <li><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</li>
+                  ${
+                    order.stain_option
+                      ? `<li><strong>Stain Option:</strong> ${order.stain_option}</li>`
+                      : ""
+                  }
+                  ${
+                    order.paint_option
+                      ? `<li><strong>Paint Option:</strong> ${order.paint_option}</li>`
+                      : ""
+                  }
+                  <li><strong>Subtotal:</strong> $${parseFloat(
+                    order.subtotal
+                  ).toFixed(2)}</li>
+                  <li><strong>Special Discount:</strong> $${parseFloat(
+                    order.discount || 0
+                  ).toFixed(2)}</li>
+                  <li><strong>Additional Discount:</strong> ${additionalDiscountPercent}% ($${parseFloat(
+                order.additional_discount || 0
+              ).toFixed(2)})</li>
+                  <li><strong>Tax:</strong> $${parseFloat(order.tax).toFixed(
+                    2
+                  )}</li>
+                  <li><strong>Shipping:</strong> ${
+                    order.shipping !== null
+                      ? `$${parseFloat(order.shipping).toFixed(2)}`
+                      : "-"
+                  }</li>
+                  <li><strong>Total:</strong> $${parseFloat(
+                    order.total
+                  ).toFixed(2)}</li>
                 </ul>
                 <p><strong>Next Steps:</strong></p>
                 <ul>
@@ -5203,34 +5435,35 @@ app.put("/api/admin/orders/:id/status", adminauthenticateToken, async (req, res)
                 <p>Best regards,<br>Team Studio Signature Cabinets</p>
               </div>
             `,
-          };
-          break;
+            };
+            break;
+        }
+
+        try {
+          await transporter.sendMail(mailOptions);
+          console.log(
+            `Email sent for order ${order.order_id} status: ${status}`
+          );
+        } catch (emailErr) {
+          console.error(`Failed to send email for ${status} status:`, emailErr);
+        }
       }
 
-      try {
-        await transporter.sendMail(mailOptions);
-        console.log(`Email sent for order ${order.order_id} status: ${status}`);
-      } catch (emailErr) {
-        console.error(`Failed to send email for ${status} status:`, emailErr);
+      res.json({ message: "Order status updated successfully" });
+    } catch (err) {
+      if (connection) {
+        await connection.rollback();
+        connection.release();
       }
-    }
-
-    res.json({ message: "Order status updated successfully" });
-  } catch (err) {
-    if (connection) {
-      await connection.rollback();
-      connection.release();
-    }
-    console.error("Server error:", err);
-    res.status(500).json({ error: "Server error" });
-  } finally {
-    if (connection) {
-      connection.release();
+      console.error("Server error:", err);
+      res.status(500).json({ error: "Server error" });
+    } finally {
+      if (connection) {
+        connection.release();
+      }
     }
   }
-});
-
-
+);
 
 cron.schedule("* * * * *", async () => {
   console.log(
@@ -5349,7 +5582,9 @@ cron.schedule("* * * * *", async () => {
   }
 });
 
-app.delete("/api/admin/orders/:id", adminauthenticateToken,
+app.delete(
+  "/api/admin/orders/:id",
+  adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
 
@@ -5374,7 +5609,9 @@ app.delete("/api/admin/orders/:id", adminauthenticateToken,
 );
 
 // GET /api/contact/messages
-app.get("/api/admin/contact/messages",adminauthenticateToken,
+app.get(
+  "/api/admin/contact/messages",
+  adminauthenticateToken,
   async (req, res) => {
     try {
       const query = `
@@ -5392,7 +5629,9 @@ app.get("/api/admin/contact/messages",adminauthenticateToken,
 );
 
 // Upload media
-app.post("/api/admin/elearning/upload",adminauthenticateToken,
+app.post(
+  "/api/admin/elearning/upload",
+  adminauthenticateToken,
   upload.single("media"),
   async (req, res) => {
     try {
@@ -5447,7 +5686,8 @@ app.get("/api/admin/elearning", adminauthenticateToken, async (req, res) => {
 });
 
 // Toggle visibility
-app.put("/api/admin/elearning/:id/toggle",
+app.put(
+  "/api/admin/elearning/:id/toggle",
   adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
@@ -5474,7 +5714,8 @@ app.put("/api/admin/elearning/:id/toggle",
 );
 
 // Delete media
-app.delete("/api/admin/elearning/:id",
+app.delete(
+  "/api/admin/elearning/:id",
   adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
@@ -5535,7 +5776,8 @@ const validatePhone = (phone) => {
 };
 
 // Fetch all admins
-app.get("/api/adminuserpanel/admins",
+app.get(
+  "/api/adminuserpanel/admins",
   adminauthenticateToken,
   async (req, res) => {
     try {
@@ -5569,7 +5811,8 @@ app.get("/api/adminuserpanel/admins",
 //   }
 // );
 
-app.get("/api/adminuserpanel/users",
+app.get(
+  "/api/adminuserpanel/users",
   adminauthenticateToken,
   async (req, res) => {
     try {
@@ -5655,7 +5898,8 @@ app.get("/api/adminuserpanel/users",
 //   }
 // );
 
-app.post("/api/adminuserpanel/register",
+app.post(
+  "/api/adminuserpanel/register",
   adminauthenticateToken,
   async (req, res) => {
     const { fullName, email, password, confirmPassword, phone, bio } = req.body;
@@ -5791,7 +6035,8 @@ const sendWelcomeEmail = async (email, fullName, userType, password) => {
   }
 };
 
-app.post("/api/adminuserpanel/signup",
+app.post(
+  "/api/adminuserpanel/signup",
   adminauthenticateToken,
   async (req, res) => {
     const {
@@ -5999,7 +6244,8 @@ app.post("/api/adminuserpanel/signup",
 
 // Delete a user from users table
 
-app.delete("/api/adminuserpanel/users/:id",
+app.delete(
+  "/api/adminuserpanel/users/:id",
   adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
@@ -6020,7 +6266,8 @@ app.delete("/api/adminuserpanel/users/:id",
 );
 
 // Delete an admin from admin table
-app.delete("/api/adminuserpanel/admins/:id",
+app.delete(
+  "/api/adminuserpanel/admins/:id",
   adminauthenticateToken,
   async (req, res) => {
     const { id } = req.params;
@@ -6074,7 +6321,9 @@ app.delete("/api/adminuserpanel/admins/:id",
 
 // GET /api/items?sku=<sku>&item_type=<item_type>&color=<color>
 
-app.get("/api/admin/vendorproducts",adminauthenticateToken,
+app.get(
+  "/api/admin/vendorproducts",
+  adminauthenticateToken,
   async (req, res) => {
     try {
       const { vendor_id } = req.query;
@@ -6197,7 +6446,6 @@ app.get("/api/admin/items", adminauthenticateToken, async (req, res) => {
 //   }
 // });
 
-
 app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
   try {
     const {
@@ -6263,7 +6511,6 @@ app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
   }
 });
 
-
 // PUT /api/items/:id
 // app.put("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
 //   try {
@@ -6306,7 +6553,6 @@ app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
 //   }
 // });
 
-
 app.put("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -6324,7 +6570,8 @@ app.put("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
       qty == null
     ) {
       return res.status(400).json({
-        error: "Missing required fields: sku, description, item_type, unit_of_measure, color, price, qty",
+        error:
+          "Missing required fields: sku, description, item_type, unit_of_measure, color, price, qty",
       });
     }
 
@@ -6353,7 +6600,6 @@ app.put("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
   }
 });
 
-
 // DELETE /api/items/:id
 app.delete("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
   try {
@@ -6371,8 +6617,6 @@ app.delete("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
   }
 });
 
-
-
 // app.post("/api/admin/import-items", async (req, res) => {
 //   let connection;
 
@@ -6382,7 +6626,6 @@ app.delete("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
 
 //     // Read Excel file (adjust file path as needed)
 //     const filePath = "SSC MASTER LIST.xlsx";
-
 
 //     const workbook = XLSX.readFile(filePath);
 //     const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -6485,8 +6728,6 @@ app.delete("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
 //   }
 // });
 
-
-
 // Endpoint to import items from uploaded Excel file
 
 const excelupload = multer({
@@ -6494,132 +6735,247 @@ const excelupload = multer({
   limits: { fileSize: 10000000 }, // 10MB limit
   fileFilter(req, file, cb) {
     if (
-      !file.mimetype.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') &&
-      !file.mimetype.includes('application/vnd.ms-excel')
+      !file.mimetype.includes(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      ) &&
+      !file.mimetype.includes("application/vnd.ms-excel")
     ) {
-      return cb(new Error('Only Excel files (.xlsx, .xls) are supported'));
+      return cb(new Error("Only Excel files (.xlsx, .xls) are supported"));
     }
     cb(null, true);
   },
 });
 
-
-
-
-
-app.post('/api/admin/import-items', adminauthenticateToken, excelupload.single('file'), async (req, res) => {
-  let connection;
-
-  try {
-    // Get database connection
-    connection = await pool.getConnection();
-
-    // Check if file was uploaded
-    if (!req.file) {
-      throw new Error('No Excel file was uploaded');
-    }
-
-    // Read Excel file from buffer
-    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const data = XLSX.utils.sheet_to_json(sheet);
-
-    if (data.length === 0) {
-      throw new Error('Excel file is empty or has no data rows');
-    }
-
-    console.log('Excel headers:', Object.keys(data[0]));
-
-    let skippedRows = [];
+app.post(
+  "/api/admin/import-items",
+  adminauthenticateToken,
+  excelupload.single("file"),
+  async (req, res) => {
+    let connection;
 
     try {
-      await connection.beginTransaction();
+      // Get database connection
+      connection = await pool.getConnection();
 
-      for (const [index, item] of data.entries()) {
-        // Normalize keys to lowercase and trim
-        const itemKeys = Object.keys(item).reduce((acc, key) => {
-          acc[key.toLowerCase()] = typeof item[key] === 'string' ? item[key].trim() : item[key];
-          return acc;
-        }, {});
+      // Check if file was uploaded
+      if (!req.file) {
+        throw new Error("No Excel file was uploaded");
+      }
 
-        // Map fields to database columns
-        const sku = itemKeys['no'] ? String(itemKeys['no']).trim() : null;
-        const description = itemKeys['description'] ? String(itemKeys['description']).trim() : null;
-        const color = itemKeys['color'] ? String(itemKeys['color']).trim() : null;
-        const item_type = itemKeys['description 2'] ? String(itemKeys['description 2']).trim() : 'STAINED ITEMS';
-        const search_description = itemKeys['item name'] ? String(itemKeys['item name']).trim() : null;
-        const unit_of_measure = itemKeys['base unit of measure'] ? String(itemKeys['base unit of measure']).trim() : 'Each';
-        const price = itemKeys['unit price'] !== undefined ? parseFloat(itemKeys['unit price']) : null;
-        const qty = itemKeys['qty'] !== undefined ? parseFloat(itemKeys['qty']) : 0;
+      // Read Excel file from buffer
+      const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(sheet);
 
-        console.log(
-          `Row ${index + 2}: SKU=${sku}, Description=${description}, Color=${color}, Item Type=${item_type}, Search Description=${search_description}, Unit of Measure=${unit_of_measure}, Price=${price}, Qty=${qty}`
-        );
+      if (data.length === 0) {
+        throw new Error("Excel file is empty or has no data rows");
+      }
 
-        if (!sku || !description) {
-          skippedRows.push({
-            row: index + 2,
-            item,
-            reason: `Missing SKU or Description`,
-          });
-          continue;
-        }
+      console.log("Excel headers:", Object.keys(data[0]));
 
-        // Insert into items table
-        await connection.query(
-          `INSERT INTO items (
+      let skippedRows = [];
+
+      try {
+        await connection.beginTransaction();
+
+        for (const [index, item] of data.entries()) {
+          // Normalize keys to lowercase and trim
+          const itemKeys = Object.keys(item).reduce((acc, key) => {
+            acc[key.toLowerCase()] =
+              typeof item[key] === "string" ? item[key].trim() : item[key];
+            return acc;
+          }, {});
+
+          // Map fields to database columns
+          const sku = itemKeys["no"] ? String(itemKeys["no"]).trim() : null;
+          const description = itemKeys["description"]
+            ? String(itemKeys["description"]).trim()
+            : null;
+          const color = itemKeys["color"]
+            ? String(itemKeys["color"]).trim()
+            : null;
+          const item_type = itemKeys["description 2"]
+            ? String(itemKeys["description 2"]).trim()
+            : "STAINED ITEMS";
+          const search_description = itemKeys["item name"]
+            ? String(itemKeys["item name"]).trim()
+            : null;
+          const unit_of_measure = itemKeys["base unit of measure"]
+            ? String(itemKeys["base unit of measure"]).trim()
+            : "Each";
+          const price =
+            itemKeys["unit price"] !== undefined
+              ? parseFloat(itemKeys["unit price"])
+              : null;
+          const qty =
+            itemKeys["qty"] !== undefined ? parseFloat(itemKeys["qty"]) : 0;
+
+          console.log(
+            `Row ${
+              index + 2
+            }: SKU=${sku}, Description=${description}, Color=${color}, Item Type=${item_type}, Search Description=${search_description}, Unit of Measure=${unit_of_measure}, Price=${price}, Qty=${qty}`
+          );
+
+          if (!sku || !description) {
+            skippedRows.push({
+              row: index + 2,
+              item,
+              reason: `Missing SKU or Description`,
+            });
+            continue;
+          }
+
+          // Insert into items table
+          await connection.query(
+            `INSERT INTO items (
             sku, description, item_type, search_description, unit_of_measure, price, color, qty,
             weight, cube, cw, gr, se, sw
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            sku,
-            description,
-            item_type,
-            search_description,
-            unit_of_measure,
-            price,
-            color,
-            qty,
-            null, // weight
-            null, // cube
-            null, // cw
-            null, // gr
-            null, // se
-            null, // sw
-          ]
-        );
+            [
+              sku,
+              description,
+              item_type,
+              search_description,
+              unit_of_measure,
+              price,
+              color,
+              qty,
+              null, // weight
+              null, // cube
+              null, // cw
+              null, // gr
+              null, // se
+              null, // sw
+            ]
+          );
+        }
+
+        await connection.commit();
+
+        res.json({
+          message: "Data imported successfully",
+          skippedRows,
+        });
+      } catch (err) {
+        console.error("Error importing data:", err);
+        if (connection) {
+          await connection.rollback();
+        }
+        res
+          .status(500)
+          .json({ error: "Failed to import data", details: err.message });
+      }
+    } catch (error) {
+      console.error("Error reading file or opening connection:", error.message);
+      res.status(500).json({ error: error.message });
+    } finally {
+      if (connection) {
+        connection.release();
+      }
+    }
+  }
+);
+
+app.post(
+  "/api/admin/products",
+  adminauthenticateToken,
+  upload.single("photo"),
+  async (req, res) => {
+    try {
+      const { name, item_type, color, is_visible } = req.body;
+
+      // Validate required fields
+      if (!name || !item_type || !color) {
+        return res
+          .status(400)
+          .json({ error: "Name, item_type, and color are required" });
       }
 
-      await connection.commit();
+      // Handle is_visible (default to true if not provided)
+      const isVisible =
+        is_visible !== undefined
+          ? is_visible === "true" || is_visible === "1" || is_visible === 1
+            ? 1
+            : 0
+          : 1;
 
-      res.json({
-        message: 'Data imported successfully',
-        skippedRows,
+      // Handle photo path
+      const photoPath = req.file ? `/Uploads/${req.file.filename}` : null;
+
+      // Insert new product into the database
+      const [result] = await pool.query(
+        `INSERT INTO products (name, item_type, color, photo_path, is_visible, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
+        [name, item_type, color, photoPath, isVisible]
+      );
+
+      // Retrieve the inserted product
+      const [newProduct] = await pool.query(
+        `SELECT * FROM products WHERE id = ?`,
+        [result.insertId]
+      );
+
+      if (newProduct.length === 0) {
+        return res
+          .status(500)
+          .json({ error: "Failed to retrieve created product" });
+      }
+
+      // Format response to match frontend expectations
+      res.status(201).json({
+        id: newProduct[0].id,
+        name: newProduct[0].name,
+        item_type: newProduct[0].item_type,
+        color: newProduct[0].color,
+        photo_path: newProduct[0].photo_path
+          ? `${req.protocol}://${req.get("host")}${newProduct[0].photo_path}`
+          : null,
+        is_visible: newProduct[0].is_visible,
+        updated_at: new Date(newProduct[0].updated_at).toISOString(),
       });
     } catch (err) {
-      console.error('Error importing data:', err);
-      if (connection) {
-        await connection.rollback();
-      }
-      res.status(500).json({ error: 'Failed to import data', details: err.message });
+      console.error("Server error:", err);
+      res.status(500).json({ error: err.message || "Server error" });
     }
-  } catch (error) {
-    console.error('Error reading file or opening connection:', error.message);
-    res.status(500).json({ error: error.message });
-  } finally {
-    if (connection) {
-      connection.release();
+  }
+);
+
+// GET /api/admin/products/:id
+app.get("/api/admin/products/:id", adminauthenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Fetch product by ID
+    const [products] = await pool.query(`SELECT * FROM products WHERE id = ?`, [
+      id,
+    ]);
+
+    if (products.length === 0) {
+      return res.status(404).json({ error: "Product not found" });
     }
+
+    // Format response to match frontend expectations
+    const product = products[0];
+    res.json({
+      id: product.id,
+      name: product.name,
+      item_type: product.item_type,
+      color: product.color,
+      photo_path: product.photo_path
+        ? `${req.protocol}://${req.get("host")}${product.photo_path}`
+        : null,
+      is_visible: product.is_visible,
+      updated_at: new Date(product.updated_at).toISOString(),
+    });
+  } catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({ error: err.message || "Server error" });
   }
 });
 
-
-
-
-
-
 // PUT /api/admin/products/:id - Update a product
-app.put("/api/admin/products/:id",
+app.put(
+  "/api/admin/products/:id",
   adminauthenticateToken,
   upload.single("photo"),
   async (req, res) => {
@@ -6700,7 +7056,8 @@ app.put("/api/admin/products/:id",
 );
 
 // DELETE /api/admin/products/:id - Delete a product
-app.delete( "/api/admin/products/:id",
+app.delete(
+  "/api/admin/products/:id",
   adminauthenticateToken,
   async (req, res) => {
     try {
@@ -6720,7 +7077,8 @@ app.delete( "/api/admin/products/:id",
 );
 
 // Get all messages for all vendors (admin view)
-app.get("/api/admin/vendors/messages",
+app.get(
+  "/api/admin/vendors/messages",
   adminauthenticateToken,
   async (req, res) => {
     const connection = await pool.getConnection();
@@ -6740,7 +7098,8 @@ app.get("/api/admin/vendors/messages",
 );
 
 // Send a reply to a specific vendor
-app.post("/api/admin/vendors/:vendorId/messages",
+app.post(
+  "/api/admin/vendors/:vendorId/messages",
   adminauthenticateToken,
   async (req, res) => {
     const { vendorId } = req.params;
@@ -6975,7 +7334,8 @@ app.get("/api/admin/rfqs/:id", adminauthenticateToken, async (req, res) => {
   }
 });
 
-app.put("/api/admin/rfqs/:id/quote/:quote_id/accept",
+app.put(
+  "/api/admin/rfqs/:id/quote/:quote_id/accept",
   adminauthenticateToken,
   async (req, res) => {
     const connection = await pool.getConnection();
@@ -7071,7 +7431,8 @@ app.put("/api/admin/rfqs/:id/quote/:quote_id/accept",
   }
 );
 
-app.put("/api/admin/rfqs/:id/quote/:quote_id/reject",
+app.put(
+  "/api/admin/rfqs/:id/quote/:quote_id/reject",
   adminauthenticateToken,
   async (req, res) => {
     const { rejection_reason } = req.body;
@@ -7131,8 +7492,6 @@ app.put("/api/admin/rfqs/:id/quote/:quote_id/reject",
     }
   }
 );
-
-
 
 app.get("/api/admin/invoices", adminauthenticateToken, async (req, res) => {
   try {
@@ -7195,6 +7554,253 @@ app.get("/api/admin/invoices", adminauthenticateToken, async (req, res) => {
   }
 });
 
+// POST /api/admin/team
+app.post(
+  "/api/admin/team",
+  adminauthenticateToken,
+  upload.single("photo"),
+  async (req, res) => {
+    try {
+      const { name, email, phone, position } = req.body;
+
+      // Validate required fields
+      if (!name || !email || !phone || !position) {
+        return res
+          .status(400)
+          .json({ error: "Name, email, phone, and position are required" });
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: "Invalid email format" });
+      }
+
+      // Validate phone format (basic check for digits and common characters)
+      const phoneRegex = /^\+?[\d\s-]{8,20}$/;
+      if (!phoneRegex.test(phone)) {
+        return res.status(400).json({ error: "Invalid phone number format" });
+      }
+
+      // Check if email already exists
+      const [existing] = await pool.query(
+        `SELECT id FROM team_members WHERE email = ?`,
+        [email]
+      );
+      if (existing.length > 0) {
+        return res.status(400).json({ error: "Email already exists" });
+      }
+
+      const photoPath = req.file ? `/Uploads/${req.file.filename}` : null;
+
+      // Insert new team member
+      const [result] = await pool.query(
+        `INSERT INTO team_members (name, email, phone, position, photo_path, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
+        [name, email, phone, position, photoPath]
+      );
+
+      // Retrieve the inserted team member
+      const [newMember] = await pool.query(
+        `SELECT * FROM team_members WHERE id = ?`,
+        [result.insertId]
+      );
+
+      if (newMember.length === 0) {
+        return res
+          .status(500)
+          .json({ error: "Failed to retrieve created team member" });
+      }
+
+      res.status(201).json({
+        id: newMember[0].id,
+        name: newMember[0].name,
+        email: newMember[0].email,
+        phone: newMember[0].phone,
+        position: newMember[0].position,
+        photo_path: newMember[0].photo_path
+          ? `${req.protocol}://${req.get("host")}${newMember[0].photo_path}`
+          : null,
+        updated_at: new Date(newMember[0].updated_at).toISOString(),
+      });
+    } catch (err) {
+      console.error("Server error:", err);
+      res.status(500).json({ error: err.message || "Server error" });
+    }
+  }
+);
+
+// GET /api/admin/team
+app.get("/api/admin/team", adminauthenticateToken, async (req, res) => {
+  try {
+    const [teamMembers] = await pool.query(`SELECT * FROM team_members`);
+
+    res.json(
+      teamMembers.map((member) => ({
+        id: member.id,
+        name: member.name,
+        email: member.email,
+        phone: member.phone,
+        position: member.position,
+        photo_path: member.photo_path
+          ? `${req.protocol}://${req.get("host")}${member.photo_path}`
+          : null,
+        updated_at: new Date(member.updated_at).toISOString(),
+      }))
+    );
+  } catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({ error: err.message || "Server error" });
+  }
+});
+
+// GET /api/admin/team/:id
+app.get("/api/admin/team/:id", adminauthenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [members] = await pool.query(
+      `SELECT * FROM team_members WHERE id = ?`,
+      [id]
+    );
+
+    if (members.length === 0) {
+      return res.status(404).json({ error: "Team member not found" });
+    }
+
+    const member = members[0];
+    res.json({
+      id: member.id,
+      name: member.name,
+      email: member.email,
+      phone: member.phone,
+      position: member.position,
+      photo_path: member.photo_path
+        ? `${req.protocol}://${req.get("host")}${member.photo_path}`
+        : null,
+      updated_at: new Date(member.updated_at).toISOString(),
+    });
+  } catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({ error: err.message || "Server error" });
+  }
+});
+
+// PUT /api/admin/team/:id
+app.put(
+  "/api/admin/team/:id",
+  adminauthenticateToken,
+  upload.single("photo"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, email, phone, position } = req.body;
+
+      // Validate at least one field is provided
+      if (!name && !email && !phone && !position && !req.file) {
+        return res
+          .status(400)
+          .json({ error: "At least one field must be provided" });
+      }
+
+      // Get current team member data
+      const [currentMember] = await pool.query(
+        `SELECT * FROM team_members WHERE id = ?`,
+        [id]
+      );
+      if (currentMember.length === 0) {
+        return res.status(404).json({ error: "Team member not found" });
+      }
+
+      // Validate email if provided
+      if (email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          return res.status(400).json({ error: "Invalid email format" });
+        }
+        if (email !== currentMember[0].email) {
+          const [existing] = await pool.query(
+            `SELECT id FROM team_members WHERE email = ? AND id != ?`,
+            [email, id]
+          );
+          if (existing.length > 0) {
+            return res.status(400).json({ error: "Email already exists" });
+          }
+        }
+      }
+
+      // Validate phone if provided
+      if (phone) {
+        const phoneRegex = /^\+?[\d\s-]{8,20}$/;
+        if (!phoneRegex.test(phone)) {
+          return res.status(400).json({ error: "Invalid phone number format" });
+        }
+      }
+
+      // Use existing values if not provided
+      const updatedName = name || currentMember[0].name;
+      const updatedEmail = email || currentMember[0].email;
+      const updatedPhone = phone || currentMember[0].phone;
+      const updatedPosition = position || currentMember[0].position;
+      const updatedPhotoPath = req.file
+        ? `/Uploads/${req.file.filename}`
+        : currentMember[0].photo_path;
+
+      const [result] = await pool.query(
+        `UPDATE team_members
+         SET name = ?, email = ?, phone = ?, position = ?, photo_path = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [
+          updatedName,
+          updatedEmail,
+          updatedPhone,
+          updatedPosition,
+          updatedPhotoPath,
+          id,
+        ]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: "Team member not found" });
+      }
+
+      res.json({
+        id: parseInt(id),
+        name: updatedName,
+        email: updatedEmail,
+        phone: updatedPhone,
+        position: updatedPosition,
+        photo_path: updatedPhotoPath
+          ? `${req.protocol}://${req.get("host")}${updatedPhotoPath}`
+          : null,
+        updated_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("Server error:", err);
+      res.status(500).json({ error: err.message || "Server error" });
+    }
+  }
+);
+
+// DELETE /api/admin/team/:id
+app.delete("/api/admin/team/:id", adminauthenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [result] = await pool.query(`DELETE FROM team_members WHERE id = ?`, [
+      id,
+    ]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Team member not found" });
+    }
+
+    res.json({ message: "Team member deleted successfully" });
+  } catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({ error: err.message || "Server error" });
+  }
+});
 
 //-----------------------------------------------------------------------Vendor API Endpoints-----------------------------------------------------------------------
 
