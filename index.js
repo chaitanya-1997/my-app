@@ -3333,11 +3333,78 @@ app.post("/api/admin/login", async (req, res) => {
 });
 
 // Get Admin Profile
+// app.get("/api/admin/profile", adminauthenticateToken, async (req, res) => {
+//   try {
+//     console.log("Fetching profile for admin ID:", req.admin.id);
+//     const [admins] = await pool.query(
+//       "SELECT id, full_name, email, phone, role, bio FROM admins WHERE id = ? AND is_active = 1",
+//       [req.admin.id]
+//     );
+
+//     if (admins.length === 0) {
+//       return res.status(404).json({ error: "Admin not found" });
+//     }
+
+//     const admin = admins[0];
+//     res.json({
+//       fullName: admin.full_name,
+//       email: admin.email,
+//       phone: admin.phone || "",
+//       role: admin.role,
+//       bio: admin.bio || "",
+//     });
+//   } catch (err) {
+//     console.error("Server error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+// // Update Admin Profile
+// app.put("/api/admin/profile", adminauthenticateToken, async (req, res) => {
+//   const { fullName, email, phone, bio } = req.body;
+
+//   // Validation
+//   if (!fullName || !email) {
+//     return res.status(400).json({ error: "Full name and email are required" });
+//   }
+//   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+//     return res.status(400).json({ error: "Invalid email format" });
+//   }
+//   if (phone && !/^\(\d{3}\) \d{3}-\d{4}$/.test(phone)) {
+//     return res
+//       .status(400)
+//       .json({ error: "Phone format should be (XXX) XXX-XXXX" });
+//   }
+
+//   try {
+//     // Check if email is taken by another admin
+//     const [existingAdmins] = await pool.query(
+//       "SELECT id FROM admins WHERE email = ? AND id != ?",
+//       [email, req.admin.id]
+//     );
+//     if (existingAdmins.length > 0) {
+//       return res.status(400).json({ error: "Email already in use" });
+//     }
+
+//     // Update profile
+//     await pool.query(
+//       "UPDATE admins SET full_name = ?, email = ?, phone = ?, bio = ?, updated_at = NOW() WHERE id = ?",
+//       [fullName, email, phone || null, bio || null, req.admin.id]
+//     );
+
+//     res.json({ message: "Profile updated successfully" });
+//   } catch (err) {
+//     console.error("Server error:", err);
+//     res.status(500).json({ error: "Server error" });
+//   }
+// });
+
+// GET /api/admin/profile
 app.get("/api/admin/profile", adminauthenticateToken, async (req, res) => {
   try {
     console.log("Fetching profile for admin ID:", req.admin.id);
     const [admins] = await pool.query(
-      "SELECT id, full_name, email, phone, role, bio FROM admins WHERE id = ? AND is_active = 1",
+      "SELECT id, full_name, email, phone, role, bio, profile_photo FROM admins WHERE id = ? AND is_active = 1",
       [req.admin.id]
     );
 
@@ -3352,6 +3419,9 @@ app.get("/api/admin/profile", adminauthenticateToken, async (req, res) => {
       phone: admin.phone || "",
       role: admin.role,
       bio: admin.bio || "",
+      profilePhoto: admin.profile_photo
+        ? `${req.protocol}://${req.get("host")}${admin.profile_photo}`
+        : null,
     });
   } catch (err) {
     console.error("Server error:", err);
@@ -3359,45 +3429,78 @@ app.get("/api/admin/profile", adminauthenticateToken, async (req, res) => {
   }
 });
 
-// Update Admin Profile
-app.put("/api/admin/profile", adminauthenticateToken, async (req, res) => {
-  const { fullName, email, phone, bio } = req.body;
+// PUT /api/admin/profile
+app.put(
+  "/api/admin/profile",
+  adminauthenticateToken,
+  upload.single("profilePhoto"),
+  async (req, res) => {
+    const { fullName, email, phone, bio } = req.body;
 
-  // Validation
-  if (!fullName || !email) {
-    return res.status(400).json({ error: "Full name and email are required" });
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ error: "Invalid email format" });
-  }
-  if (phone && !/^\(\d{3}\) \d{3}-\d{4}$/.test(phone)) {
-    return res
-      .status(400)
-      .json({ error: "Phone format should be (XXX) XXX-XXXX" });
-  }
-
-  try {
-    // Check if email is taken by another admin
-    const [existingAdmins] = await pool.query(
-      "SELECT id FROM admins WHERE email = ? AND id != ?",
-      [email, req.admin.id]
-    );
-    if (existingAdmins.length > 0) {
-      return res.status(400).json({ error: "Email already in use" });
+    // Validation
+    if (!fullName || !email) {
+      return res.status(400).json({ error: "Full name and email are required" });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Invalid email format" });
+    }
+    if (phone && !/^\(\d{3}\) \d{3}-\d{4}$/.test(phone)) {
+      return res
+        .status(400)
+        .json({ error: "Phone format should be (XXX) XXX-XXXX" });
     }
 
-    // Update profile
-    await pool.query(
-      "UPDATE admins SET full_name = ?, email = ?, phone = ?, bio = ?, updated_at = NOW() WHERE id = ?",
-      [fullName, email, phone || null, bio || null, req.admin.id]
-    );
+    try {
+      // Check if email is taken by another admin
+      const [existingAdmins] = await pool.query(
+        "SELECT id FROM admins WHERE email = ? AND id != ?",
+        [email, req.admin.id]
+      );
+      if (existingAdmins.length > 0) {
+        return res.status(400).json({ error: "Email already in use" });
+      }
 
-    res.json({ message: "Profile updated successfully" });
-  } catch (err) {
-    console.error("Server error:", err);
-    res.status(500).json({ error: "Server error" });
+      // Get current admin data
+      const [currentAdmin] = await pool.query(
+        "SELECT profile_photo FROM admins WHERE id = ?",
+        [req.admin.id]
+      );
+      if (currentAdmin.length === 0) {
+        return res.status(404).json({ error: "Admin not found" });
+      }
+
+      // Use existing photo path if no new photo is uploaded
+      const updatedPhotoPath = req.file
+        ? `/uploads/${req.file.filename}`
+        : currentAdmin[0].profile_photo;
+
+      // Update profile
+      const [result] = await pool.query(
+        "UPDATE admins SET full_name = ?, email = ?, phone = ?, bio = ?, profile_photo = ?, updated_at = NOW() WHERE id = ?",
+        [fullName, email, phone || null, bio || null, updatedPhotoPath, req.admin.id]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: "Admin not found" });
+      }
+
+      res.json({
+        message: "Profile updated successfully",
+        fullName,
+        email,
+        phone: phone || "",
+        bio: bio || "",
+        profilePhoto: updatedPhotoPath
+          ? `${req.protocol}://${req.get("host")}${updatedPhotoPath}`
+          : null,
+      });
+    } catch (err) {
+      console.error("Server error:", err);
+      res.status(500).json({ error: "Server error" });
+    }
   }
-});
+);
+
 
 // Update Admin Password
 
@@ -6939,6 +7042,7 @@ app.post(
     }
   }
 );
+
 app.get(
   "/api/admin/products",
   adminauthenticateToken,
