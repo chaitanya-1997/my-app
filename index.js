@@ -682,12 +682,19 @@ app.get("/api/verify-token", authenticateToken, async (req, res) => {
   res.json({ user: { id: req.user.id, email: req.user.email } });
 });
 
-// GET /api/profile
+
 // app.get("/api/profile", authenticateToken, async (req, res) => {
 //   try {
 //     const userId = req.user.id;
 //     const [users] = await pool.query(
-//       "SELECT id, user_type, full_name, company_name, email, phone, street, city, state, postal_code, account_status, last_login, admin_discount, created_at, notes, profile_photo FROM users WHERE id = ?",
+//       `SELECT u.id, u.user_type, u.full_name, u.company_name, u.email, u.phone, 
+//               u.street, u.city, u.state, u.postal_code, u.account_status, u.last_login, 
+//               u.admin_discount, u.created_at, u.notes, u.profile_photo,u.admin_discount,
+//               u.team_member_id, t.name AS team_member_name, t.position AS team_member_position,
+//               t.email AS team_member_email, t.phone AS team_member_phone, t.photo_path AS team_member_photo
+//        FROM users u
+//        LEFT JOIN team_members t ON u.team_member_id = t.id
+//        WHERE u.id = ?`,
 //       [userId]
 //     );
 
@@ -702,15 +709,21 @@ app.get("/api/verify-token", authenticateToken, async (req, res) => {
 //   }
 // });
 
+
+
+
+
 app.get("/api/profile", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
+    console.log("Fetching profile for user ID:", userId);
     const [users] = await pool.query(
       `SELECT u.id, u.user_type, u.full_name, u.company_name, u.email, u.phone, 
               u.street, u.city, u.state, u.postal_code, u.account_status, u.last_login, 
-              u.admin_discount, u.created_at, u.notes, u.profile_photo,u.admin_discount,
-              u.team_member_id, t.name AS team_member_name, t.position AS team_member_position,
-              t.email AS team_member_email, t.phone AS team_member_phone, t.photo_path AS team_member_photo
+              u.admin_discount, u.created_at, u.notes, u.profile_photo, u.team_member_id, 
+              t.name AS team_member_name, t.position AS team_member_position,
+              t.email AS team_member_email, t.phone AS team_member_phone, 
+              t.photo_path AS team_member_photo
        FROM users u
        LEFT JOIN team_members t ON u.team_member_id = t.id
        WHERE u.id = ?`,
@@ -721,14 +734,54 @@ app.get("/api/profile", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    res.json(users[0]);
+    const user = users[0];
+    res.json({
+      id: user.id,
+      userType: user.user_type,
+      fullName: user.full_name,
+      companyName: user.company_name || "",
+      email: user.email,
+      phone: user.phone || "",
+      street: user.street || "",
+      city: user.city || "",
+      state: user.state || "",
+      postalCode: user.postal_code || "",
+      accountStatus: user.account_status,
+      lastLogin: user.last_login,
+      adminDiscount: user.admin_discount || null,
+      createdAt: user.created_at,
+      notes: user.notes || "",
+      profilePhoto: user.profile_photo
+        ? `${req.protocol}://${req.get("host")}${user.profile_photo}?t=${Date.now()}`
+        : null,
+      teamMember: user.team_member_id
+        ? {
+            id: user.team_member_id,
+            name: user.team_member_name || "",
+            position: user.team_member_position || "",
+            email: user.team_member_email || "",
+            phone: user.team_member_phone || "",
+            photo: user.team_member_photo
+              ? `${req.protocol}://${req.get("host")}${user.team_member_photo}?t=${Date.now()}`
+              : null,
+          }
+        : null,
+    });
   } catch (err) {
-    console.error(err);
+    console.error("Server error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
+
+
+
+
+
 // PUT /api/profile
+
+
+
 app.put(
   "/api/profile",
   authenticateToken,
@@ -3701,10 +3754,17 @@ app.post("/api/admin/reset-password", async (req, res) => {
   }
 });
 
+
 // app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
 //   try {
 //     const [users] = await pool.query(
-//       "SELECT id, full_name, email, phone, created_at, last_login, account_status, is_active, company_name, street, city, state, postal_code, admin_discount, updated_at, notes FROM users WHERE user_type = 'customer'"
+//       `SELECT u.id, u.full_name, u.email, u.phone, u.created_at, u.last_login, 
+//               u.account_status, u.is_active, u.company_name, u.street, u.city, 
+//               u.state, u.postal_code, u.admin_discount, u.updated_at, u.notes, 
+//               u.team_member_id, t.name AS team_member_name
+//        FROM users u
+//        LEFT JOIN team_members t ON u.team_member_id = t.id
+//        WHERE u.user_type = 'customer'`
 //     );
 
 //     res.json({
@@ -3725,6 +3785,8 @@ app.post("/api/admin/reset-password", async (req, res) => {
 //         admin_discount: user.admin_discount,
 //         updated_at: user.updated_at,
 //         notes: user.notes,
+//         team_member_id: user.team_member_id,
+//         team_member_name: user.team_member_name,
 //       })),
 //     });
 //   } catch (err) {
@@ -3733,33 +3795,6 @@ app.post("/api/admin/reset-password", async (req, res) => {
 //   }
 // });
 
-// fetch all vendors
-
-// app.get("/api/admin/vendors", adminauthenticateToken, async (req, res) => {
-//   try {
-//     const [vendors] = await pool.query(
-//       "SELECT id, full_name, email, phone, created_at, last_login, account_status, is_active, company_name, address, updated_at,notes FROM users WHERE user_type = 'vendor'"
-//     );
-//     res.json({
-//       vendors: vendors.map((vendor) => ({
-//         id: vendor.id,
-//         fullName: vendor.full_name,
-//         email: vendor.email,
-//         phone: vendor.phone,
-//         joinDate: vendor.created_at,
-//         lastLogin: vendor.last_login || null,
-//         account_status: vendor.account_status,
-//         is_active: vendor.is_active,
-//         company_name: vendor.company_name,
-//         address: vendor.address,
-//         updated_at: vendor.updated_at,
-//       })),
-//     });
-//   } catch (err) {
-//     console.error("Server error:", err);
-//     res.status(500).json({ error: "Server error" });
-//   }
-// });
 
 app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
   try {
@@ -3767,7 +3802,7 @@ app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
       `SELECT u.id, u.full_name, u.email, u.phone, u.created_at, u.last_login, 
               u.account_status, u.is_active, u.company_name, u.street, u.city, 
               u.state, u.postal_code, u.admin_discount, u.updated_at, u.notes, 
-              u.team_member_id, t.name AS team_member_name
+              u.team_member_id, u.profile_photo, t.name AS team_member_name
        FROM users u
        LEFT JOIN team_members t ON u.team_member_id = t.id
        WHERE u.user_type = 'customer'`
@@ -3793,6 +3828,9 @@ app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
         notes: user.notes,
         team_member_id: user.team_member_id,
         team_member_name: user.team_member_name,
+        profile_photo: user.profile_photo
+          ? `${req.protocol}://${req.get("host")}${user.profile_photo}`
+        : null,
       })),
     });
   } catch (err) {
@@ -3800,6 +3838,7 @@ app.get("/api/admin/users", adminauthenticateToken, async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 app.get("/api/admin/vendors", adminauthenticateToken, async (req, res) => {
   try {
