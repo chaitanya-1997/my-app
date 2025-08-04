@@ -6500,7 +6500,7 @@ app.get("/api/admin/items", adminauthenticateToken, async (req, res) => {
   try {
     const { sku, item_type, color } = req.query;
     let query =
-      "SELECT id, sku, description, item_type, search_description, unit_of_measure, price, weight, cube, cw, gr, se, sw, created_at, updated_at, color,qty FROM items WHERE 1=1";
+      "SELECT id, sku, description, item_type, search_description, unit_of_measure, price, weight, cube, cw, gr, se, sw, created_at, updated_at, color,qty,unitcost FROM items WHERE 1=1";
     const params = [];
 
     if (sku) {
@@ -6524,7 +6524,7 @@ app.get("/api/admin/items", adminauthenticateToken, async (req, res) => {
   }
 });
 
-// POST /api/admin/items
+
 // app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
 //   try {
 //     const {
@@ -6534,8 +6534,8 @@ app.get("/api/admin/items", adminauthenticateToken, async (req, res) => {
 //       unit_of_measure,
 //       color,
 //       price,
-//       search_description,
 //       qty,
+//       search_description,
 //       weight,
 //       cube,
 //       cw,
@@ -6544,22 +6544,24 @@ app.get("/api/admin/items", adminauthenticateToken, async (req, res) => {
 //       sw,
 //     } = req.body;
 
+//     // Validate required fields
 //     if (
 //       !sku ||
 //       !description ||
 //       !item_type ||
 //       !unit_of_measure ||
 //       !color ||
-//       price == null
+//       price == null ||
+//       qty == null
 //     ) {
 //       return res.status(400).json({
 //         error:
-//           "Missing required fields: sku, description, item_type, unit_of_measure, color, price",
+//           "Missing required fields: sku, description, item_type, unit_of_measure, color, price, qty",
 //       });
 //     }
 
 //     const [result] = await pool.query(
-//       "INSERT INTO items (sku, description, item_type, search_description, unit_of_measure, color, price,qty, weight, cube, cw, gr, se, sw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)",
+//       "INSERT INTO items (sku, description, item_type, search_description, unit_of_measure, color, price, qty, weight, cube, cw, gr, se, sw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 //       [
 //         sku,
 //         description,
@@ -6588,6 +6590,7 @@ app.get("/api/admin/items", adminauthenticateToken, async (req, res) => {
 //   }
 // });
 
+
 app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
   try {
     const {
@@ -6598,6 +6601,7 @@ app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
       color,
       price,
       qty,
+      unitcost, // Added unitcost
       search_description,
       weight,
       cube,
@@ -6615,16 +6619,17 @@ app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
       !unit_of_measure ||
       !color ||
       price == null ||
-      qty == null
+      qty == null ||
+      unitcost == null // Added unitcost validation
     ) {
       return res.status(400).json({
         error:
-          "Missing required fields: sku, description, item_type, unit_of_measure, color, price, qty",
+          "Missing required fields: sku, description, item_type, unit_of_measure, color, price, qty, unitcost",
       });
     }
 
     const [result] = await pool.query(
-      "INSERT INTO items (sku, description, item_type, search_description, unit_of_measure, color, price, qty, weight, cube, cw, gr, se, sw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO items (sku, description, item_type, search_description, unit_of_measure, color, price, qty, unitcost, weight, cube, cw, gr, se, sw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         sku,
         description,
@@ -6634,6 +6639,7 @@ app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
         color,
         price,
         qty,
+        unitcost, // Added unitcost to query
         weight || null,
         cube || null,
         cw || null,
@@ -6653,26 +6659,30 @@ app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
   }
 });
 
-// PUT /api/items/:id
 // app.put("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
 //   try {
 //     const { id } = req.params;
-//     const { sku, description, item_type, unit_of_measure, color, price } =
+//     const { sku, description, item_type, unit_of_measure, color, price, qty } =
 //       req.body;
 
+//     // Validate required fields
 //     if (
 //       !sku ||
 //       !description ||
 //       !item_type ||
 //       !unit_of_measure ||
 //       !color ||
-//       price == null
+//       price == null ||
+//       qty == null
 //     ) {
-//       return res.status(400).json({ error: "Missing required fields" });
+//       return res.status(400).json({
+//         error:
+//           "Missing required fields: sku, description, item_type, unit_of_measure, color, price, qty",
+//       });
 //     }
 
 //     const [result] = await pool.query(
-//       "UPDATE items SET sku = ?, description = ?, item_type = ?, unit_of_measure = ?, color = ?, price = ?, updated_at = NOW() WHERE id = ?",
+//       "UPDATE items SET sku = ?, description = ?, item_type = ?, unit_of_measure = ?, color = ?, price = ?, qty = ?, updated_at = NOW() WHERE id = ?",
 //       [
 //         sku,
 //         description,
@@ -6680,6 +6690,7 @@ app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
 //         unit_of_measure,
 //         color,
 //         price,
+//         qty,
 //         id,
 //       ]
 //     );
@@ -6695,11 +6706,12 @@ app.post("/api/admin/items", adminauthenticateToken, async (req, res) => {
 //   }
 // });
 
+// DELETE /api/items/:id
+
 app.put("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { sku, description, item_type, unit_of_measure, color, price, qty } =
-      req.body;
+    const { sku, description, item_type, unit_of_measure, color, price, qty, unitcost } = req.body;
 
     // Validate required fields
     if (
@@ -6709,16 +6721,17 @@ app.put("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
       !unit_of_measure ||
       !color ||
       price == null ||
-      qty == null
+      qty == null ||
+      unitcost == null // Added unitcost validation
     ) {
       return res.status(400).json({
         error:
-          "Missing required fields: sku, description, item_type, unit_of_measure, color, price, qty",
+          "Missing required fields: sku, description, item_type, unit_of_measure, color, price, qty, unitcost",
       });
     }
 
     const [result] = await pool.query(
-      "UPDATE items SET sku = ?, description = ?, item_type = ?, unit_of_measure = ?, color = ?, price = ?, qty = ?, updated_at = NOW() WHERE id = ?",
+      "UPDATE items SET sku = ?, description = ?, item_type = ?, unit_of_measure = ?, color = ?, price = ?, qty = ?, unitcost = ?, updated_at = NOW() WHERE id = ?",
       [
         sku,
         description,
@@ -6727,6 +6740,7 @@ app.put("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
         color,
         price,
         qty,
+        unitcost, // Added unitcost to query
         id,
       ]
     );
@@ -6742,7 +6756,6 @@ app.put("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
   }
 });
 
-// DELETE /api/items/:id
 app.delete("/api/admin/items/:id", adminauthenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -6888,9 +6901,7 @@ const excelupload = multer({
   },
 });
 
-app.post(
-  "/api/admin/import-items",
-  adminauthenticateToken,
+app.post("/api/admin/import-items", adminauthenticateToken,
   excelupload.single("file"),
   async (req, res) => {
     let connection;
@@ -6949,6 +6960,10 @@ app.post(
             itemKeys["unit price"] !== undefined
               ? parseFloat(itemKeys["unit price"])
               : null;
+               const unitcost =
+            itemKeys["unit cost"] !== undefined
+              ? parseFloat(itemKeys["unit cost"])
+              : "0.00";
           const qty =
             itemKeys["qty"] !== undefined ? parseFloat(itemKeys["qty"]) : 0;
 
@@ -6970,9 +6985,9 @@ app.post(
           // Insert into items table
           await connection.query(
             `INSERT INTO items (
-            sku, description, item_type, search_description, unit_of_measure, price, color, qty,
+            sku, description, item_type, search_description, unit_of_measure, price, color, qty,unitcost,
             weight, cube, cw, gr, se, sw
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)`,
             [
               sku,
               description,
@@ -6982,6 +6997,7 @@ app.post(
               price,
               color,
               qty,
+              unitcost,
               null, // weight
               null, // cube
               null, // cw
